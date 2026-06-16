@@ -47,6 +47,7 @@ Gemini and more — each answers independently, and then the interesting part be
 - 📓 **Decision journal** — log what you chose, then come back and record how it turned out (local only)
 - 🧭 **Two layouts** — Flow (one page; analysis appears beneath the answers) or Classic (each stage its own screen)
 - 🖼️ **Vision** — drop in an image for the models that support it
+- 📎 **Attach a document** — add a `.md`/`.txt` to your question (or drag it in) and the whole council reads it before weighing in; the file stays out of your saved history
 - 💸 **Calm cost estimate** — a running token/$ tally, your spend at a glance, and an optional spend alert
 - 📤 **Export** — Markdown, PDF, image, or a paste-ready **decision memo**; **share councils** as importable presets
 - ⌨️ **`council` CLI** — the same engine in your terminal: pipe documents in, get JSON out, gate CI on divergence
@@ -93,7 +94,8 @@ cp .build/release/council /usr/local/bin/   # or anywhere on your PATH
 
 council keys set claude                      # keys go to the macOS Keychain (shared with the app)
 council "should we ship now or wait?" --seats claude,gpt,gemini
-cat design.md | council "review this" --md   # attach a document, get a decision memo
+council "review this" --file design.md --md  # attach a document, get a decision memo
+cat design.md | council "review this"        # …or pipe it in on stdin
 council "..." --json                         # structured output (schema council.cli.v1)
 council "..." --fail-above 40                # CI gate: exit 1 if the council diverges too much
 ```

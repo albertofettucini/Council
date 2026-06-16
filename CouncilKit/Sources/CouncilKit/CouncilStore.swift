@@ -9,6 +9,19 @@ public enum SeatStatus: Equatable { case idle, loading, failed(String) }
 /// Result of a "test connection" probe against a local/self-hosted endpoint (Settings → Models).
 public enum EndpointTestResult: Equatable { case ok(Int); case failed(String) }
 
+/// Shared engine limits, owned here so every surface (app, CLI, future MCP) enforces the same rule.
+public enum CouncilLimits {
+    /// Conservative cap for an attached document, in characters (~25k tokens). Past this, surfaces
+    /// must REJECT with a clear error — never silently truncate.
+    public static let maxDocumentCharacters = 100_000
+    /// nil if the document is within the cap, else a clear, specific error message.
+    public static func documentError(_ text: String) -> String? {
+        let n = text.count
+        guard n > maxDocumentCharacters else { return nil }
+        return "Document is \(n) characters — the limit is \(maxDocumentCharacters). Trim it or paste a smaller excerpt."
+    }
+}
+
 /// Central app state. A session is a list of `Round`s; each round keeps its own answers,
 /// peer reviews, divergence and synthesis. The user navigates rounds; nothing is wiped.
 @MainActor
@@ -518,14 +531,25 @@ public final class CouncilStore {
 
     /// Round 1: a NEW round; every connected seat answers in parallel, streaming token-by-token,
     /// each with its own prior context. An optional image rides on the question.
-    public func ask(_ query: String, image: ImageAttachment? = nil) async {
+    /// Round 1. An optional `document` is analyzed by EVERY seat alongside the question — the core
+    /// "pressure-test this AI output with other models" use case. Like an image, the document rides
+    /// on the request only: history + the saved round keep just the typed question, so a big doc
+    /// never bloats the sidebar or follow-up context.
+    public func ask(_ query: String, image: ImageAttachment? = nil, document: String? = nil) async {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty || image != nil else { return }
-        let prompt = trimmed.isEmpty ? "Describe and assess this image." : trimmed
+        // Defend the public API: a whitespace-only document is no document, regardless of caller hygiene.
+        let trimmedDoc = document?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let doc = (trimmedDoc?.isEmpty == false) ? trimmedDoc : nil
+        guard !trimmed.isEmpty || image != nil || doc != nil else { return }
+        let question = trimmed.isEmpty
+            ? (doc != nil ? "Analyze the attached document." : "Describe and assess this image.")
+            : trimmed
+        // The document is folded into the prompt every seat receives, but NOT saved as the question.
+        let effectivePrompt = doc.map { "\(question)\n\n--- ATTACHED DOCUMENT ---\n\n\($0)" } ?? question
 
         let keyed = seats.filter { hasKey($0) }
         guard !keyed.isEmpty else { return }
-        var round = Round(question: prompt)
+        var round = Round(question: question)
         for seat in keyed { round.answers[seat.id] = "" }   // in-progress slots
         rounds.append(round)
         let idx = rounds.count - 1
@@ -539,12 +563,12 @@ public final class CouncilStore {
                 let sys = systemPrompt(for: seat)
                 // Only hand the image to models that accept it; a text-only model would 400.
                 let seatImage = (seat.provider?.supportsVision(model: seat.model) ?? false) ? image : nil
-                let messages = [ChatMessage.system(sys)] + (history[seat.id] ?? []) + [.user(prompt, image: seatImage)]
+                let messages = [ChatMessage.system(sys)] + (history[seat.id] ?? []) + [.user(effectivePrompt, image: seatImage)]
                 group.addTask { @MainActor in
                     let r = await self.streamCall(seat: seat, messages: messages) { partial in
                         self.setAnswer(idx, seat.id, partial)
                     }
-                    self.finishAnswer(roundIndex: idx, seat: seat, question: prompt, result: r)
+                    self.finishAnswer(roundIndex: idx, seat: seat, question: question, result: r)
                 }
             }
         }

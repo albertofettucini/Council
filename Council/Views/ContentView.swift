@@ -302,6 +302,14 @@ private extension View {
     func cursorGlow(selected: Bool = false) -> some View { modifier(CursorGlow(selected: selected)) }
 }
 
+/// A plain-text/markdown document staged for the next deliberation. Holds only what the composer
+/// needs to show a chip and what the engine needs to fold into each seat's prompt.
+struct PickedDocument: Equatable {
+    let name: String
+    let text: String
+    var chars: Int { text.count }
+}
+
 struct ContentView: View {
     let store: CouncilStore
     @State private var query: String = ""
@@ -313,6 +321,12 @@ struct ContentView: View {
     @State private var pickedImage: NSImage?
     @State private var isDropTargeted = false
     @State private var showImagePreview = false
+
+    /// Optional text/markdown document attached to the next directive. Like the image, it rides on
+    /// the request to every seat and is NOT saved into history — only the typed question is.
+    @State private var pickedDocument: PickedDocument?
+    /// Surfaced when an attached document is rejected (too large / unreadable).
+    @State private var docError: String?
 
     /// Appearance: "light" (default) or "dark". Toggled from Settings, not the main screen.
     @AppStorage("council.appearance") private var appearance = "light"
@@ -2074,16 +2088,47 @@ struct ContentView: View {
                 }
             }
 
+            if let doc = pickedDocument {
+                HStack(spacing: 10) {
+                    Image(systemName: "doc.text")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Blue.sub)
+                        .frame(width: 46, height: 46)
+                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Blue.glassStroke, lineWidth: 1))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(doc.name).font(Blue.mono(10, .bold)).foregroundStyle(Blue.ink)
+                            .lineLimit(1).truncationMode(.middle)
+                        Text("\(doc.chars.formatted()) chars · sent to every seat")
+                            .font(Blue.mono(9)).foregroundStyle(Blue.sub)
+                    }
+                    Button { pickedDocument = nil } label: {
+                        Image(systemName: "xmark").font(.system(size: 10, weight: .bold)).foregroundStyle(Blue.ink)
+                            .frame(width: 22, height: 22).overlay(Rectangle().stroke(Blue.ink, lineWidth: 1.5))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Remove attached document")
+                    Spacer()
+                }
+            }
+
+            if let docError {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 9))
+                    Text(docError).font(Blue.mono(9)).lineLimit(2)
+                }
+                .foregroundStyle(Blue.red)
+            }
+
             HStack(spacing: 14) {
-                Button(action: pickImage) {
-                    Image(systemName: "photo").font(.system(size: 15)).foregroundStyle(Blue.sub)
+                Button(action: pickAttachment) {
+                    Image(systemName: "paperclip").font(.system(size: 15)).foregroundStyle(Blue.sub)
                         .frame(width: 30, height: 30)
                         .glassHover(corner: 15)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("Attach image")
-                .accessibilityLabel("Attach image")
+                .help("Attach an image or a text/markdown document")
+                .accessibilityLabel("Attach image or document")
                 ComposerTextView(text: $query, placeholder: "Enter a command or prompt…",
                                  onSubmit: ask, onPasteImage: { pickedImage = $0 })
                     .frame(maxWidth: .infinity)
@@ -2104,14 +2149,19 @@ struct ContentView: View {
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 8)
-        .background(.ultraThinMaterial, in: Capsule())
-        .background(Blue.glassBright, in: Capsule())
-        .overlay(Capsule().strokeBorder(isDropTargeted ? Blue.ink.opacity(0.4) : Blue.glassStroke,
-                                        lineWidth: isDropTargeted ? 2 : 1))
+        // A fixed-radius rounded rect, NOT a Capsule: a Capsule's corner radius is half its height,
+        // so once an attachment chip makes the pill tall the ends balloon into huge semicircles and
+        // the send button looks adrift in the curve. 24 keeps the single-line pill looking rounded
+        // while the multi-row state stays a tidy box. Keep all three layers on the same shape.
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .background(Blue.glassBright, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .strokeBorder(isDropTargeted ? Blue.ink.opacity(0.4) : Blue.glassStroke,
+                          lineWidth: isDropTargeted ? 2 : 1))
         .shadow(color: Color.adaptive(.black.opacity(0.10), .white.opacity(0.08)), radius: 20, y: 6)
         .shadow(color: .black.opacity(0.30), radius: 16, y: 10)
         .onDrop(of: [.image, .fileURL], isTargeted: $isDropTargeted) { providers in
-            handleImageDrop(providers)
+            handleDrop(providers)
         }
       }
       .sheet(isPresented: $showImagePreview) {
@@ -2153,7 +2203,7 @@ struct ContentView: View {
     }
 
     private var canAsk: Bool {
-        (!query.trimmingCharacters(in: .whitespaces).isEmpty || pickedImage != nil) && !isAsking
+        (!query.trimmingCharacters(in: .whitespaces).isEmpty || pickedImage != nil || pickedDocument != nil) && !isAsking
     }
 
     private var tokenString: String {
@@ -2168,22 +2218,70 @@ struct ContentView: View {
         return CGFloat(min(6, lines)) * 18 + 5
     }
 
-    private func pickImage() {
+    /// Plain-text/markdown types accepted as a document attachment.
+    private static let docTypes: [UTType] = [.plainText, .text, UTType(filenameExtension: "md") ?? .plainText, UTType(filenameExtension: "markdown") ?? .plainText]
+
+    private func pickAttachment() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.image]
+        panel.allowedContentTypes = [.image] + ContentView.docTypes
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        if panel.runModal() == .OK, let url = panel.url, let img = NSImage(contentsOf: url) {
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        if let img = NSImage(contentsOf: url) {
             pickedImage = img
+            docError = nil
+        } else if let doc = readDocument(at: url) {
+            ingestDocument(name: doc.name, raw: doc.raw)
+        } else {
+            docError = "Couldn’t read “\(url.lastPathComponent)” as text."
         }
     }
 
-    private func handleImageDrop(_ providers: [NSItemProvider]) -> Bool {
+    /// Read a file URL's text. Wraps the read in security-scoped access so it succeeds for sandboxed
+    /// drag-drop (and is a harmless no-op for files chosen via the open panel). Pure read, no state —
+    /// safe to call off the main actor, which the drop handler does while the URL is still valid.
+    private func readDocument(at url: URL) -> (name: String, raw: String)? {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        guard let raw = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        return (url.lastPathComponent, raw)
+    }
+
+    /// Validate already-read document text against the shared engine cap and stage it (or surface an
+    /// error). Mutates view state, so it must run on the main actor.
+    private func ingestDocument(name: String, raw: String) {
+        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { docError = "“\(name)” is empty."; return }
+        if let err = CouncilLimits.documentError(text) { docError = err; return }
+        docError = nil
+        pickedDocument = PickedDocument(name: name, text: text)
+    }
+
+    /// Drop handler: an image becomes the picked image; a text/markdown file becomes the document.
+    private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
         for provider in providers where provider.canLoadObject(ofClass: NSImage.self) {
             provider.loadObject(ofClass: NSImage.self) { obj, _ in
-                if let img = obj as? NSImage {
-                    DispatchQueue.main.async { pickedImage = img }
+                if let img = obj as? NSImage { DispatchQueue.main.async { pickedImage = img; docError = nil } }
+            }
+            return true
+        }
+        for provider in providers where provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+            _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                guard let url else { return }
+                let isText = ContentView.docTypes.contains { type in
+                    (try? url.resourceValues(forKeys: [.contentTypeKey]).contentType)?.conforms(to: type) ?? false
+                } || ["md", "markdown", "txt", "text"].contains(url.pathExtension.lowercased())
+                // Read while the URL is still valid (inside the completion), then hop to main to stage.
+                // Surface the same kind of error the open panel does, so both entry points behave alike.
+                guard isText else {
+                    DispatchQueue.main.async { docError = "Can’t attach “\(url.lastPathComponent)” — only text or markdown files." }
+                    return
                 }
+                guard let doc = readDocument(at: url) else {
+                    DispatchQueue.main.async { docError = "Couldn’t read “\(url.lastPathComponent)” as text." }
+                    return
+                }
+                DispatchQueue.main.async { ingestDocument(name: doc.name, raw: doc.raw) }
             }
             return true
         }
@@ -2199,17 +2297,20 @@ struct ContentView: View {
 
     private func ask() {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard (!q.isEmpty || pickedImage != nil), !isBusy else { return }
+        guard (!q.isEmpty || pickedImage != nil || pickedDocument != nil), !isBusy else { return }
         let image: ImageAttachment? = pickedImage
             .flatMap(pngData(from:))
             .map { ImageAttachment(data: $0, mediaType: "image/png") }
+        let document = pickedDocument?.text
         isAsking = true
         query = ""
         pickedImage = nil
+        pickedDocument = nil
+        docError = nil
         if isClassic { canvasMode = .panels }
         else { withAnimation(Motion.view) { flowProxy?.scrollTo("flow.panels", anchor: .top) } }
         runningTask = Task {
-            await store.ask(q, image: image)
+            await store.ask(q, image: image, document: document)
             // Analysis is OPT-IN: once ≥2 answers land, the flow offers a single RUN — nothing
             // spends tokens without a click.
             isAsking = false
@@ -3555,6 +3656,8 @@ private struct SettingsSheet: View {
                     .textSelection(.enabled)
                 Spacer()
             }
+            // Engine attribution — the app is a thin shell over the open-source CouncilKit package.
+            Text(CouncilKit.signature).font(Blue.mono(9)).foregroundStyle(Blue.dim)
             Toggle(isOn: Binding(
                 get: { Updater.controller.updater.automaticallyChecksForUpdates },
                 set: { Updater.controller.updater.automaticallyChecksForUpdates = $0 })) {

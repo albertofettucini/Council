@@ -31,6 +31,7 @@ struct Options {
     var failAbove: Int?
     var noSave = false
     var allowEnvKeys = false
+    var filePath: String?
 }
 
 let usage = """
@@ -39,10 +40,12 @@ council — multi-LLM roundtable in your terminal (the Council app's engine)
 USAGE
   council "question" [flags]            run the full pipeline
   council keys set <provider>           store an API key in the Keychain (hidden prompt)
-  cat doc.md | council "review this"    attach stdin as a document for every seat
+  council "review this" --file doc.md   attach a document for every seat
+  cat doc.md | council "review this"    same, from stdin
 
 FLAGS
   --config <path.council>   use a saved lineup (schema council.v1)
+  --file <path>             attach a text/markdown document (analyzed by every seat)
   --seats a,b,c             ad-hoc lineup with default personas
                             (claude gpt gemini deepseek grok mistral perplexity
                              openrouter ollama apple custom1 custom2)
@@ -58,6 +61,8 @@ EXIT CODES   0 ok · 1 divergence gate tripped · 2 runtime error · 64 usage er
 
 Keys are read from the macOS Keychain (shared with the Council app — macOS will ask
 once to allow access). Sessions land in the app's history unless --no-save.
+
+\(CouncilKit.attribution)
 """
 
 func parseArgs(_ argv: [String]) -> Options {
@@ -68,7 +73,10 @@ func parseArgs(_ argv: [String]) -> Options {
         let a = args.removeFirst()
         switch a {
         case "--help", "-h": print(usage); exit(0)
+        case "--version", "-V": print("council \(CouncilKit.version)\n\(CouncilKit.signature)"); exit(0)
         case "--config":     o.configPath = args.isEmpty ? nil : args.removeFirst()
+        case "--file":       guard !args.isEmpty else { die("--file needs a path (see --help)", code: 64) }
+                             o.filePath = args.removeFirst()
         case "--seats":      o.seatNames = (args.isEmpty ? "" : args.removeFirst())
                                  .split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
         case "--json":       o.json = true
@@ -175,18 +183,30 @@ func run(_ opts: Options) async {
         errPrint("warning: \(seat.provider!.displayName) has no API key (council keys set …) — seat skipped")
     }
 
-    // stdin document (when piped)
-    var question = opts.question
-    guard !question.isEmpty else { die("no question given (see --help)", code: 64) }
-    if isatty(0) == 0 {
+    // Attached document: --file wins, else stdin when piped. Folded into every seat's prompt by
+    // the engine — NOT appended to the question here, so the saved history stays clean. All --file
+    // failure modes share the runtime exit code so a CI script sees one code for "bad input file".
+    var document: String?
+    if let path = opts.filePath {
+        guard let raw = try? String(contentsOfFile: path, encoding: .utf8) else {
+            die("can't read --file \(path)")
+        }
+        let doc = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !doc.isEmpty else { die("--file \(path) is empty") }
+        if let err = CouncilLimits.documentError(doc) { die(err) }
+        document = doc
+        errPrint(Style.dim("attached \(doc.count)-char document from \(path)"))
+    } else if isatty(0) == 0 {
         let data = FileHandle.standardInput.readDataToEndOfFile()
-        let cap = 400_000
-        guard data.count <= cap else { die("stdin document is \(data.count) bytes — cap is \(cap). Trim it or split it.") }
         if let doc = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines), !doc.isEmpty {
-            question += "\n\n--- DOCUMENT (attached) ---\n\n\(doc)"
-            errPrint(Style.dim("attached \(data.count)-byte document from stdin"))
+            if let err = CouncilLimits.documentError(doc) { die(err) }
+            document = doc
+            errPrint(Style.dim("attached \(doc.count)-char document from stdin"))
         }
     }
+    // A document alone is a valid run — the engine synthesizes "Analyze the attached document."
+    let question = opts.question
+    guard !question.isEmpty || document != nil else { die("no question given (see --help)", code: 64) }
 
     let payloadMode = opts.json || opts.md          // keep stdout clean for machine output
     func stage(_ s: String) { errPrint(Style.dim("· \(s)…")) }
@@ -196,7 +216,7 @@ func run(_ opts: Options) async {
 
     // 1 — answers
     stage("answers (\(connected.count) seats)")
-    await store.ask(question)
+    await store.ask(question, document: document)
     let round = { () -> Round? in store.rounds.indices.contains(store.viewingRound) ? store.rounds[store.viewingRound] : nil }
     guard let r0 = round(), !r0.answeredSeatIDs.isEmpty else {
         let errs = store.seats.compactMap { seat -> String? in
@@ -304,7 +324,9 @@ func run(_ opts: Options) async {
         }
         var obj: [String: Any] = [
             "schemaVersion": "council.cli.v1",
-            "question": opts.question,
+            // The round's question, not the raw arg: on the document-only path opts.question is empty
+            // while the round ran with the engine-synthesized "Analyze the attached document."
+            "question": r.question,
             "startedAt": started, "finishedAt": finished,
             "seats": seatsArr, "answers": answers,
             "peerReviews": reviews, "rebuttals": rebuttals,
