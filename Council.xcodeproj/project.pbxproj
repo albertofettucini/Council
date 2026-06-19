@@ -333,9 +333,13 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		AA10000000000000000000C3 /* XCLocalSwiftPackageReference "CouncilKit" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = CouncilKit;
+		AA10000000000000000000C3 /* XCRemoteSwiftPackageReference "CouncilKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/albertofettucini/CouncilKit.git";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 0.1.0;
+			};
 		};
 /* End XCLocalSwiftPackageReference section */
 
@@ -358,6 +362,7 @@
 		};
 		AA10000000000000000000C2 /* CouncilKit */ = {
 			isa = XCSwiftPackageProductDependency;
+			package = AA10000000000000000000C3 /* XCRemoteSwiftPackageReference "CouncilKit" */;
 			productName = CouncilKit;
 		};
 /* End XCSwiftPackageProductDependency section */

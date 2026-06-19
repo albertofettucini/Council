@@ -1,6 +1,15 @@
 {
-  "originHash" : "0a248faab3c3ce9b2521cfd08216905a370676c27ff3460a185a6abbca77ad7d",
+  "originHash" : "deaa2b0f4c5e83fdd9f15027fbb5997c934a59f35d36c96418c53368670209b5",
   "pins" : [
+    {
+      "identity" : "councilkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/albertofettucini/CouncilKit.git",
+      "state" : {
+        "revision" : "d6251bbef0e1bd710c87d713b45a126f760bf42f",
+        "version" : "0.1.0"
+      }
+    },
     {
       "identity" : "sparkle",
       "kind" : "remoteSourceControl",
