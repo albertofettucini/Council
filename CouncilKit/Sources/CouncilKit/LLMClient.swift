@@ -111,18 +111,21 @@ public enum HTTPError {
 /// OpenAI `/chat/completions` format and shares one client, differing only by endpoint.
 public enum LLMClientFactory {
     public static func make(for provider: LLMProvider, model: String,
-                     temperature: Double? = nil, maxTokens: Int? = nil) -> LLMClient {
+                     temperature: Double? = nil, maxTokens: Int? = nil,
+                     endpoint: URL? = nil) -> LLMClient {
         // Fall back to the provider default if a blank model id ever slips through.
         let model = model.isEmpty ? provider.defaultModel : model
         if provider == .claude {
             return AnthropicClient(model: model, temperature: temperature, maxTokens: maxTokens)
         }
-        // A custom slot whose URL is unset/cleared — say what to do, not just "unavailable".
-        if provider.customSlot != nil, provider.openAIEndpoint == nil {
-            return UnavailableClient(reason: "\(provider.panelName) has no endpoint set — add its server URL in Settings → Models.")
+        // A transient (CouncilKit facade) endpoint overrides the provider's configured one — e.g. a
+        // custom slot whose UserDefaults URL is unset because the consumer supplied it in code instead.
+        let resolved = endpoint ?? provider.openAIEndpoint
+        if provider.customSlot != nil, resolved == nil {
+            return UnavailableClient(reason: "\(provider.panelName) has no endpoint set — add its server URL in Settings → Models, or pass Advisor(endpoint:).")
         }
-        if let endpoint = provider.openAIEndpoint {
-            return OpenAICompatibleClient(endpoint: endpoint, model: model,
+        if let resolved {
+            return OpenAICompatibleClient(endpoint: resolved, model: model,
                                           temperature: temperature, maxTokens: maxTokens)
         }
         if provider == .foundationModels {

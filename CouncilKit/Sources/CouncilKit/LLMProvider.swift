@@ -170,6 +170,14 @@ public enum LLMProvider: String, CaseIterable, Identifiable, Codable {
         return h
     }
 
+    /// Build an OpenAI-compatible `/chat/completions` URL from a raw base URL, using the same
+    /// normalization as the custom slots. Used by the CouncilKit facade for transient (no-disk) endpoints.
+    public static func chatEndpoint(forHost raw: String) -> URL? {
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return nil }
+        return URL(string: "\(normalizeHost(trimmed))/v1/chat/completions")
+    }
+
     /// OpenAI-compatible `/chat/completions` endpoint. nil for backends that don't use the
     /// generic client (Claude has its own; Foundation Models isn't networked).
     public var openAIEndpoint: URL? {

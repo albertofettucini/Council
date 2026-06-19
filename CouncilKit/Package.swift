@@ -15,5 +15,6 @@ let package = Package(
     targets: [
         .target(name: "CouncilKit"),
         .executableTarget(name: "council", dependencies: ["CouncilKit"]),
+        .testTarget(name: "CouncilKitTests", dependencies: ["CouncilKit"]),
     ]
 )

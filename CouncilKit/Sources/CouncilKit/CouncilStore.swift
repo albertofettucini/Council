@@ -141,13 +141,13 @@ public final class CouncilStore {
 
     /// Which seat generates divergence + synthesis (and so spends that provider's credit). Persisted.
     public var synthesizerSeatID: Int = 0 {
-        didSet { UserDefaults.standard.set(synthesizerSeatID, forKey: Self.synthKey) }
+        didSet { guard persistenceEnabled else { return }; UserDefaults.standard.set(synthesizerSeatID, forKey: Self.synthKey) }
     }
 
     /// Which seat (if any) plays devil's advocate — in peer review it steelmans then attacks the
     /// emerging consensus instead of looking for agreement. -1 = none. Persisted.
     public var devilsAdvocateSeatID: Int = -1 {
-        didSet { UserDefaults.standard.set(devilsAdvocateSeatID, forKey: Self.devilKey) }
+        didSet { guard persistenceEnabled else { return }; UserDefaults.standard.set(devilsAdvocateSeatID, forKey: Self.devilKey) }
     }
 
     private let seatsKey = "council.seats.v7"   // v7: ship default divergence personas
@@ -248,6 +248,9 @@ public final class CouncilStore {
     }
 
     public func saveSeats() {
+        // A non-persisting store (the CouncilKit facade, or `council --no-save`) must not overwrite the
+        // app's saved seat lineup. Persistence is gated consistently on persistenceEnabled.
+        guard persistenceEnabled else { return }
         if let data = try? JSONEncoder().encode(seats) {
             UserDefaults.standard.set(data, forKey: seatsKey)
         }
@@ -311,7 +314,16 @@ public final class CouncilStore {
 
     public var isConfigured: Bool { seats.allSatisfy(hasKey) }
 
+    /// Per-seat API keys supplied directly in code (the CouncilKit facade), consulted BEFORE the
+    /// Keychain at request time. Non-persisted — scoped to a single in-memory store.
+    public var transientKeys: [Int: String] = [:]
+
+    /// Per-seat custom OpenAI-compatible chat endpoints supplied in code (the CouncilKit facade), used
+    /// instead of the persisted `council.custom{N}.host` UserDefaults. Non-persisted — leaves no trace.
+    public var transientCustomEndpoints: [Int: URL] = [:]
+
     public func hasKey(_ seat: Seat) -> Bool {
+        if let k = transientKeys[seat.id], !k.isEmpty { return true }   // facade-supplied key
         guard let provider = seat.provider else { return false }   // no model picked yet
         return keyExists(provider)
     }
@@ -845,13 +857,20 @@ public final class CouncilStore {
         }
     }
 
+    /// Optional price override (the CouncilKit facade) so a stale built-in price can't silently
+    /// mislead. Keyed on (provider, model) because models within one provider price differently.
+    /// Returns ($/1M input, $/1M output); nil → the provider's built-in price. Non-persisted.
+    public var priceOverride: (@Sendable (LLMProvider, String?) -> (inputPer1M: Double, outputPer1M: Double)?)?
+
     private func addRoundUsage(_ idx: Int, _ seat: Seat, _ r: StreamResult) {
         guard rounds.indices.contains(idx), let provider = seat.provider,
               r.input > 0 || r.output > 0 else { return }
         rounds[idx].inputTokens += r.input
         rounds[idx].outputTokens += r.output
-        rounds[idx].costUSD += Double(r.input) / 1_000_000 * provider.pricePer1MInput
-                             + Double(r.output) / 1_000_000 * provider.pricePer1MOutput
+        let rates = priceOverride?(provider, seat.model.isEmpty ? nil : seat.model)
+            ?? (inputPer1M: provider.pricePer1MInput, outputPer1M: provider.pricePer1MOutput)
+        rounds[idx].costUSD += Double(r.input) / 1_000_000 * rates.inputPer1M
+                             + Double(r.output) / 1_000_000 * rates.outputPer1M
     }
 
     /// Build the answers for the synthesizer with ANONYMOUS, shuffled labels (Advisor A/B/C) so it
@@ -884,11 +903,14 @@ public final class CouncilStore {
                                 remap: [String: String], seatByLabel: [String: Int]) async {
         guard let provider = seat.provider else { return }
         var key = ""
-        if provider.requiresAPIKey {
+        if let k = transientKeys[seat.id], !k.isEmpty {
+            key = k                                          // facade-supplied key (also auths custom endpoints)
+        } else if provider.requiresAPIKey {
             guard let k = storedKey(for: provider) else { return }
             key = k
         }
-        let client = LLMClientFactory.make(for: provider, model: seat.model)
+        let client = LLMClientFactory.make(for: provider, model: seat.model,
+                                           endpoint: transientCustomEndpoints[seat.id])
         // Parse the RAW output — the outlier is still an anonymous label ("Advisor B"), which we
         // resolve to a seat id HERE (case-insensitively). Matching by display name later is fragile:
         // duplicate providers share a panel name, and judges drift on label casing.
@@ -939,13 +961,16 @@ public final class CouncilStore {
                             onDelta: @MainActor @escaping (String) -> Void) async -> StreamResult {
         guard let provider = seat.provider else { return (nil, 0, 0, false, "No model selected.") }
         var apiKey = ""
-        if provider.requiresAPIKey {
+        if let k = transientKeys[seat.id], !k.isEmpty {
+            apiKey = k                                       // facade-supplied key (also auths custom endpoints)
+        } else if provider.requiresAPIKey {
             guard let key = (try? KeychainStore.read(account: provider.keychainAccount)) ?? nil,
                   !key.isEmpty else { return (nil, 0, 0, false, "API key not found.") }
             apiKey = key
         }
         let client = LLMClientFactory.make(for: provider, model: seat.model,
-                                           temperature: seat.temperature, maxTokens: seat.maxTokens)
+                                           temperature: seat.temperature, maxTokens: seat.maxTokens,
+                                           endpoint: transientCustomEndpoints[seat.id])
         // Coalesce token updates to ~30fps. Streaming fires hundreds of deltas/answer; pushing
         // every one into the UI re-renders + re-parses markdown each time (O(n²)). We only flush
         // to the UI every ~33ms, and always flush the final text after the loop.
