@@ -1,12 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Sparkle appcast for Council. Release flow (NOTE: no double hyphens in this comment, XML forbids them):
-     1. build + zip:  ditto with c, k and keepParent flags into Council-X.Y.Z-macOS.zip
-     2. sign:         sign_update with the private key file, on that zip
-     3. add an <item> below (newest first) with the gh-release download URL + signature + length
-     4. commit + push (guard first), then gh release upload the zip -->
+<!-- Sparkle appcast for Council. Releases are produced by .github/workflows/release.yml
+     (push a vX.Y.Z tag); this file is regenerated and committed back to main each release.
+     Newest item first. No double hyphens inside this comment, XML forbids them. -->
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
   <channel>
     <title>Council</title>
+    <item>
+      <title>1.1.3</title>
+      <sparkle:version>10103</sparkle:version>
+      <sparkle:shortVersionString>1.1.3</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <link>https://github.com/albertofettucini/Council/releases/tag/v1.1.3</link>
+      <enclosure
+        url="https://github.com/albertofettucini/Council/releases/download/v1.1.3/Council-1.1.3-macOS.zip"
+        sparkle:edSignature="m/LtQXQ1yQrgKQOwUfQUGdWAW6W1ouehhgBQGs4j2u7/YMBMZPZDhNkxDfVo1i+lQ6APZLMACBjEWO+D/F5oDg=="
+        length="7168803"
+        type="application/octet-stream"/>
+    </item>
     <item>
       <title>1.1.2</title>
       <sparkle:version>112</sparkle:version>
