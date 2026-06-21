@@ -1,0 +1,142 @@
+name: Release
+
+# Push a SemVer tag (e.g. `git tag v1.1.3 && git push origin v1.1.3`) and this builds the app,
+# signs the zip for Sparkle, regenerates appcast.xml + commits it back to main (Council serves the
+# appcast from the repo's raw URL), and publishes a GitHub Release. No paid Apple cert: the app is
+# ad-hoc signed (the project already uses CODE_SIGN_IDENTITY "-"), so it ships UNSIGNED — Gatekeeper
+# right-click-Open. The only secret is the Sparkle EdDSA key (SPARKLE_ED_PRIVATE_KEY); notarization
+# stays a manual local step (scripts/notarize.sh) for whenever a paid identity is in play.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write          # create the Release AND commit appcast.xml back to main
+
+env:
+  SPARKLE_TOOLS_VERSION: "2.9.3"   # match the app's Sparkle; `sign_update` comes from this tarball
+
+jobs:
+  release:
+    # macos-26 ships Xcode 26 / the macOS 26 SDK, needed to COMPILE the app's Liquid Glass path
+    # (`glassEffect`). The app still RUNS on macOS 14+ (guarded by `if #available`).
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # need main as a real ref to commit the appcast back
+
+      - name: Resolve versions
+        id: meta
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          IFS=. read -r MA MI PA <<< "$VERSION"
+          # CFBundleVersion = major*10000 + minor*100 + patch — monotonic, and > the old hand-written
+          # values (1.1.2 -> 10102 > 112) so existing installs still see the update.
+          SPARKLE_VERSION=$(( 10#${MA:-0}*10000 + 10#${MI:-0}*100 + 10#${PA:-0} ))
+          echo "version=$VERSION"                 >> "$GITHUB_OUTPUT"
+          echo "sparkle_version=$SPARKLE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$GITHUB_REF_NAME"             >> "$GITHUB_OUTPUT"
+          echo "Building Council $VERSION (CFBundleVersion $SPARKLE_VERSION)"
+          xcodebuild -version || true
+
+      - name: Build Council.app (Release, ad-hoc, universal)
+        run: |
+          set -euo pipefail
+          xcodebuild -project Council.xcodeproj -scheme Council -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -archivePath build/Council.xcarchive \
+            MARKETING_VERSION="${{ steps.meta.outputs.version }}" \
+            CURRENT_PROJECT_VERSION="${{ steps.meta.outputs.sparkle_version }}" \
+            archive
+          APP="build/Council.xcarchive/Products/Applications/Council.app"
+          test -d "$APP" || { echo "::error::Council.app not found in the archive"; exit 1; }
+          echo "APP=$APP" >> "$GITHUB_ENV"
+          echo "--- version stamp + arch + signature ---"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP/Contents/Info.plist"
+          lipo -info "$APP/Contents/MacOS/Council" || true
+          codesign -dv "$APP" 2>&1 | grep -iE 'Signature|TeamIdentifier' || true
+
+      - name: Zip + checksum
+        run: |
+          set -euo pipefail
+          ZIP="Council-${{ steps.meta.outputs.version }}-macOS.zip"
+          /usr/bin/ditto -c -k --keepParent "$APP" "$ZIP"
+          shasum -a 256 "$ZIP" | tee "$ZIP.sha256"
+          echo "ZIP=$ZIP" >> "$GITHUB_ENV"
+
+      - name: Fetch Sparkle sign_update
+        run: |
+          set -euo pipefail
+          URL="https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_TOOLS_VERSION}/Sparkle-${SPARKLE_TOOLS_VERSION}.tar.xz"
+          curl -fsSL "$URL" -o sparkle.tar.xz
+          mkdir -p sparkle && tar -xJf sparkle.tar.xz -C sparkle
+          echo "SIGN_UPDATE=$(find "$PWD/sparkle" -name sign_update -type f | head -n1)" >> "$GITHUB_ENV"
+
+      - name: Sign + regenerate appcast, commit to main
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.meta.outputs.version }}"
+          SPK="${{ steps.meta.outputs.sparkle_version }}"
+          TAG="${{ steps.meta.outputs.tag }}"
+          ENCLOSURE_URL="https://github.com/albertofettucini/Council/releases/download/${TAG}/${ZIP}"
+
+          if [ -z "${SPARKLE_ED_PRIVATE_KEY:-}" ]; then
+            echo "::warning::SPARKLE_ED_PRIVATE_KEY not set — publishing the zip but NOT updating the appcast (existing users won't be offered this update). Add the secret, then re-tag."
+            exit 0
+          fi
+
+          KEYFILE="$RUNNER_TEMP/sparkle_ed_priv"
+          printf '%s' "$SPARKLE_ED_PRIVATE_KEY" > "$KEYFILE"; chmod 600 "$KEYFILE"
+          if "$SIGN_UPDATE" --help 2>&1 | grep -q -- '--ed-key-file'; then
+            SIGN_OUT="$("$SIGN_UPDATE" --ed-key-file "$KEYFILE" "$ZIP")"
+          else
+            SIGN_OUT="$("$SIGN_UPDATE" -f "$KEYFILE" "$ZIP")"
+          fi
+          rm -f "$KEYFILE"
+          echo "sign_update: $SIGN_OUT"
+          SIG="$(printf '%s' "$SIGN_OUT" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')"
+          LEN="$(printf '%s' "$SIGN_OUT" | sed -n 's/.*length="\([^"]*\)".*/\1/p')"
+          if [ -z "$SIG" ] || [ -z "$LEN" ]; then echo "::error::could not parse sign_update output"; exit 1; fi
+
+          # Update appcast ON main (Council serves it from raw .../main/appcast.xml), then push.
+          git config user.name "Joseph"
+          git config user.email "joseph.thecouncil@gmail.com"
+          git fetch origin main
+          git checkout -B main origin/main
+          python3 scripts/update-appcast.py \
+            --version "$VERSION" --sparkle-version "$SPK" --min-os "14.0" \
+            --url "$ENCLOSURE_URL" --signature "$SIG" --length "$LEN" --appcast appcast.xml
+          echo "----- appcast.xml -----"; cat appcast.xml
+          if git diff --quiet -- appcast.xml; then
+            echo "appcast unchanged (re-run of an existing version)"
+          else
+            git add appcast.xml
+            git commit -m "appcast: Council $VERSION"
+            git push origin main
+          fi
+
+      - name: Create / update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.meta.outputs.tag }}"
+          VERSION="${{ steps.meta.outputs.version }}"
+          NOTES="$(cat <<EOF
+          Council ${VERSION} — ask several LLMs one question; they answer in parallel, peer-review each other blind, and you see how much they disagree.
+
+          **Install:** download \`${ZIP}\` below, unzip, drag Council.app to Applications, then right-click → Open the first time (the app is unsigned — no paid Apple cert). It updates itself after that via Sparkle.
+          EOF
+          )"
+          ASSETS=("$ZIP" "$ZIP.sha256")
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
+          else
+            gh release create "$TAG" "${ASSETS[@]}" --title "Council ${VERSION}" --notes "$NOTES"
+          fi

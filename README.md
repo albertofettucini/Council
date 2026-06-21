@@ -67,9 +67,15 @@ Don't have a key yet? Council links you straight to each provider's console from
 
 ## Install
 
-**Download** the macOS build from the [latest release](../../releases/latest), unzip it, and drag `Council.app` to Applications. Requires **macOS 14 or later**.
+**Homebrew** — one command:
 
-> ⚠️ **First launch:** Council isn't signed with a paid Apple certificate (it's a free, solo, open-source project), so macOS Gatekeeper warns once. To open it: **right-click `Council.app` → Open → Open**, or **System Settings → Privacy & Security → "Open Anyway"**. It opens normally after that.
+```sh
+brew install --cask albertofettucini/council/council
+```
+
+**Or download** the macOS build from the [latest release](../../releases/latest), unzip it, and drag `Council.app` to Applications. Requires **macOS 14 or later**.
+
+> ⚠️ **First launch:** Council isn't signed with a paid Apple certificate (it's a free, solo, open-source project), so macOS Gatekeeper warns once. To open it: **right-click `Council.app` → Open → Open**, or **System Settings → Privacy & Security → "Open Anyway"**. It opens normally after that. (Installing with Homebrew? Add `--no-quarantine` to skip this.)
 >
 > Rather build it yourself? The whole app is in this repo — see [Build from source](#build-from-source).
 

@@ -9,6 +9,38 @@ You run the steps below **once** to set up credentials, then `notarize.sh` each 
 
 ---
 
+## Automated releases (GitHub Actions) — the default path
+
+`.github/workflows/release.yml` makes a release one command: **push a SemVer tag.**
+
+```sh
+git tag v1.1.3
+git push origin v1.1.3
+```
+
+On that tag the workflow (on a `macos-26` runner): builds `Council.app` (Release, **ad-hoc** signed —
+the project already uses `CODE_SIGN_IDENTITY = "-"`, so no paid Apple cert is needed), zips it, signs
+the zip with the Sparkle **EdDSA** key, regenerates `appcast.xml` and **commits it back to `main`**
+(Council serves the appcast from `raw.githubusercontent.com/.../main/appcast.xml`), then publishes the
+GitHub Release with the zip + SHA256. `CFBundleVersion` is derived from the tag as
+`major*10000 + minor*100 + patch` (monotonic, so Sparkle sees every release as newer).
+
+**One-time setup — add the Sparkle private key as a repo secret (it never enters the repo):**
+
+```sh
+# Council reuses the SAME EdDSA key as Engram (it's already in your login Keychain — its public half
+# is in Council-Info.plist's SUPublicEDKey). Export it and set it as the Council repo secret:
+/path/to/Sparkle/bin/generate_keys -x sparkle_private_key
+gh secret set SPARKLE_ED_PRIVATE_KEY -R albertofettucini/Council < sparkle_private_key
+rm -f sparkle_private_key
+```
+
+The app ships **unsigned** (ad-hoc): users get a one-time Gatekeeper "unidentified developer" prompt and
+open with right-click → Open. The **notarized** path below stays available for whenever a paid Developer
+ID identity is in play — run `notarize.sh` locally and upload its stapled zip instead.
+
+---
+
 ## Current state (what's done vs. what needs your account)
 
 | Item | State |
