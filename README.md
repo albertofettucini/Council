@@ -37,7 +37,7 @@ Gemini and more — each answers independently, and then the interesting part be
 
 ## Features
 
-- 🧠 **Twelve backends** — Claude · GPT (OpenAI) · Gemini · DeepSeek · Grok (xAI) · Mistral · Perplexity · OpenRouter · Ollama (local, needs [Ollama](https://ollama.com) running) · Apple Intelligence (on-device, free) · two **custom OpenAI-compatible endpoints** (llama.cpp, LM Studio, vLLM, a second Ollama box — with a test-connection button that pulls the server's real model list)
+- 🧠 **Twelve backends** — Claude · GPT (OpenAI) · Gemini · DeepSeek · Grok (xAI) · Mistral · Perplexity · OpenRouter · Ollama (local, needs [Ollama](https://ollama.com) running) · Apple Intelligence (on-device, free — needs macOS 26 on Apple-silicon) · two **custom OpenAI-compatible endpoints** (llama.cpp, LM Studio, vLLM, a second Ollama box — with a test-connection button that pulls the server's real model list)
 - ⚡ **Live streaming** answers, side by side
 - 🎭 **Distinct personas** per seat (Analyst · Practitioner · Skeptic) for real divergence — not three ways of saying the same thing
 - 😈 **Devil's Advocate** role to pressure-test the consensus
@@ -88,13 +88,14 @@ open Council.xcodeproj   # Xcode 16+ (Xcode 26 for the Liquid Glass build)
 # ⌘R to run
 ```
 
-No third-party dependencies — pure SwiftUI + Foundation. The engine lives in a local Swift package, `CouncilKit`, shared by the app and the CLI.
+Two SPM dependencies, both resolved automatically by Xcode: **Sparkle** (in-app updates) and **CouncilKit** (the engine — a separate package at [github.com/albertofettucini/CouncilKit](https://github.com/albertofettucini/CouncilKit), shared with the CLI). Otherwise pure SwiftUI + Foundation.
 
 ## CLI
 
 The same engine, in your terminal — for scripting, CI, and piping documents in:
 
 ```sh
+git clone https://github.com/albertofettucini/CouncilKit.git
 cd CouncilKit && swift build -c release
 cp .build/release/council /usr/local/bin/   # or anywhere on your PATH
 

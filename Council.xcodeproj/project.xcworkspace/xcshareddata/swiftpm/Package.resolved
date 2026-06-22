@@ -6,8 +6,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/albertofettucini/CouncilKit.git",
       "state" : {
-        "revision" : "d6251bbef0e1bd710c87d713b45a126f760bf42f",
-        "version" : "0.1.0"
+        "revision" : "0b3418746389fcb1561ada26e513e1bd0aa14286",
+        "version" : "0.1.1"
       }
     },
     {
