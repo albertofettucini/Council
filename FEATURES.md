@@ -1,5 +1,9 @@
 # Council — Feature Spec (MVP → v1)
 
+> **Historical spec.** This is the original MVP build plan. Several items it lists under DEFER / Tier-3
+> (e.g. local models via Ollama / OpenAI-compatible endpoints, per-model parameters) have since shipped —
+> this file is kept as the design snapshot, not a current status report. See the README for what's live.
+
 > Paste this to Claude Code, or keep it in the repo as `FEATURES.md`. It defines WHAT to build and, just as importantly, HOW to keep it minimal.
 
 ## PRIME DIRECTIVE: MINIMAL UI

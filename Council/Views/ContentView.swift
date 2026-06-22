@@ -1503,10 +1503,10 @@ struct ContentView: View {
                     AdvisorPanel(seat: seat,
                                  answeredProvider: store.viewedAnswerProvider(seat.id),
                                  answer: store.viewedAnswer(seat.id),
-                                 loading: store.generatingRound == store.viewingRound && store.status[seat.id] == .loading,
+                                 loading: store.generatingRound == store.viewingRound && store.status[seat.id] == .loading && store.pipelineStage == nil,
                                  failedMessage: panelFailure(seat.id),
                                  connected: connected(seat),
-                                 canRegenerate: store.isViewingLatest,
+                                 canRegenerate: store.isViewingLatest && !store.viewedRoundHadAttachment,
                                  isAdversary: store.devilsAdvocateSeatID == seat.id,
                                  onValidateKey: { k in
                                      let err = await store.validateAndSaveKey(k, for: seat)
@@ -1521,7 +1521,7 @@ struct ContentView: View {
                         .frame(width: colWidth, height: geo.size.height)   // all three equal height
                         .glassPanel(corner: layout.panelCorner, strokeOpacity: hovered ? 2.2 : 1)
                         .contentShape(Rectangle())   // hover only registers over the panel's own rect
-                        .onHover { hoveredSeat = $0 ? seat.id : (hoveredSeat == seat.id ? nil : hoveredSeat) }
+                        .onHover { hoveredSeat = $0 ? seat.id : nil }
                         .id(seat.id)   // bind the panel's @State (begun/justPicked) to its seat
                 }
             }
@@ -2212,10 +2212,13 @@ struct ContentView: View {
     }
     private var costString: String { String(format: "$%.4f", store.sessionCostUSD) }
 
-    /// Composer grows with explicit newlines, 1→6 lines, then scrolls internally.
+    /// Composer grows to fit explicit newlines AND long wrapped lines (so a long paste without any
+    /// `\n` no longer collapses to a 1-line box that hides its own text), 1→6 lines, then scrolls.
     private var composerHeight: CGFloat {
-        let lines = max(1, query.components(separatedBy: "\n").count)
-        return CGFloat(min(6, lines)) * 18 + 5
+        // Approximate visual wrapping: a composer line fits ~58 characters at the default width.
+        let visualLines = query.components(separatedBy: "\n")
+            .reduce(0) { $0 + max(1, Int(ceil(Double($1.count) / 58.0))) }
+        return CGFloat(min(6, max(1, visualLines))) * 18 + 5
     }
 
     /// Plain-text/markdown types accepted as a document attachment.
