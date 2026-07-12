@@ -6,8 +6,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/albertofettucini/CouncilKit.git",
       "state" : {
-        "revision" : "ed5adcc37aaa2c0154983479daf6ec5026939562",
-        "version" : "0.1.2"
+        "revision" : "f70d61e6992580d9f74b6027e8efa6379eca0deb",
+        "version" : "0.1.3"
       }
     },
     {
@@ -15,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/sparkle-project/Sparkle",
       "state" : {
-        "revision" : "d46d456107feacc80711b21847b82b07bd9fb46e",
-        "version" : "2.9.3"
+        "revision" : "b6496a74a087257ef5e6da1c5b29a447a60f5bd7",
+        "version" : "2.9.4"
       }
     }
   ],
