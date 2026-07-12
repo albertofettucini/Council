@@ -4,9 +4,16 @@ import AppKit
 /// A calm, lightweight markdown renderer: headings, lists, quotes, bold/italic/inline-code,
 /// fenced code blocks (copy on hover), and collapsible <think> reasoning. Typography-first,
 /// no heavy chrome — in keeping with the minimal-UI directive.
-struct MarkdownView: View {
+struct MarkdownView: View, Equatable {
     let text: String
     var baseSize: CGFloat = 14
+
+    /// Parsing + AttributedString building is the most expensive body in the app. With this,
+    /// `.equatable()` at the call sites lets SwiftUI SKIP re-parsing every finished card/panel
+    /// whenever some OTHER view streams — only the view whose text actually changed re-runs.
+    static func == (a: MarkdownView, b: MarkdownView) -> Bool {
+        a.text == b.text && a.baseSize == b.baseSize
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {

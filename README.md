@@ -132,6 +132,10 @@ privacy guarantees intact: no telemetry, and keys never leave the Keychain.
 
 Questions, ideas, or feedback? Open an issue — or reach me at **joseph.thecouncil@gmail.com**.
 
+## More from the same maker
+
+[**Engram**](https://github.com/albertofettucini/Engram) — one shared, local memory for all your AIs. Import your ChatGPT/Claude history once; every MCP client can recall it.
+
 ## License
 
 [MIT](LICENSE) © 2026 Joseph

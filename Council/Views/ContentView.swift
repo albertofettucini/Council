@@ -359,6 +359,8 @@ struct ContentView: View {
     /// answers; "classic" = each stage is its own screen in the sidebar (the pre-1.1 paradigm).
     @AppStorage("council.layout") private var layoutMode = "flow"
     private var isClassic: Bool { layoutMode == "classic" }
+    /// Orb welcome (empty flow canvas) → CONFIGURE reveals the seat panels without asking anything.
+    @State private var showSetupPanels = false
     /// Brief frosted interlude while the layout swaps — selecting a mode shouldn't snap.
     @State private var modeSwitching = false
     /// Which canvas Classic mode is showing (panels or one full-screen deliberation artifact).
@@ -1062,9 +1064,19 @@ struct ContentView: View {
             ScrollViewReader { proxy in
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: layout.canvasRowGap) {
-                        panelGrid
-                            .frame(height: geo.size.height)
-                            .id("flow.panels")
+                        // Empty-state welcome: council connected, nothing asked yet → one calm orb
+                        // instead of three empty panels. First-run setup (no connected seat) and
+                        // CONFIGURE both fall through to the panel grid.
+                        if store.rounds.isEmpty, !showSetupPanels,
+                           store.seats.contains(where: { store.hasKey($0) }) {
+                            OrbWelcome { withAnimation(.easeInOut(duration: 0.35)) { showSetupPanels = true } }
+                                .frame(height: geo.size.height)
+                                .id("flow.panels")
+                        } else {
+                            panelGrid
+                                .frame(height: geo.size.height)
+                                .id("flow.panels")
+                        }
                         stageFlow
                     }
                 }
@@ -1184,7 +1196,7 @@ struct ContentView: View {
                         .background(Blue.glassFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Blue.glassStroke, lineWidth: 1))
 
-                        MarkdownView(text: answer, baseSize: 15).textSelection(.enabled)
+                        MarkdownView(text: answer, baseSize: 15).equatable().textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .frame(maxWidth: 760, alignment: .leading)
@@ -1346,7 +1358,7 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let text, !text.isEmpty {
                 ScrollView {
-                    MarkdownView(text: text, baseSize: 15)
+                    MarkdownView(text: text, baseSize: 15).equatable()
                         .textSelection(.enabled)
                         .frame(maxWidth: 760, alignment: .leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1643,11 +1655,11 @@ struct ContentView: View {
                     .overlay(Capsule().strokeBorder(Blue.glassStroke, lineWidth: 1))
                 Spacer()
             }
-            MarkdownView(text: rebuttal, baseSize: 14).textSelection(.enabled)
+            MarkdownView(text: rebuttal, baseSize: 14).equatable().textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if let original, !original.isEmpty {
                 DisclosureGroup {
-                    MarkdownView(text: original, baseSize: 12).textSelection(.enabled)
+                    MarkdownView(text: original, baseSize: 12).equatable().textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.top, 6)
                 } label: {
@@ -1770,7 +1782,7 @@ struct ContentView: View {
                 }
                 Spacer()
             }
-            MarkdownView(text: review, baseSize: 14).textSelection(.enabled)
+            MarkdownView(text: review, baseSize: 14).equatable().textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(18)
@@ -1936,7 +1948,7 @@ struct ContentView: View {
                     .padding(.horizontal, 24).padding(.top, 10)
             }
             if let t = store.divergenceText {
-                MarkdownView(text: t, baseSize: 15).textSelection(.enabled)
+                MarkdownView(text: t, baseSize: 15).equatable().textSelection(.enabled)
                     .frame(maxWidth: 760, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(24)
@@ -1956,7 +1968,7 @@ struct ContentView: View {
                     .padding(.horizontal, 24).padding(.top, 10)
             }
             if let t = store.synthesisText {
-                MarkdownView(text: t, baseSize: 15).textSelection(.enabled)
+                MarkdownView(text: t, baseSize: 15).equatable().textSelection(.enabled)
                     .frame(maxWidth: 760, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(24)
@@ -2033,7 +2045,7 @@ struct ContentView: View {
                     .background(Blue.glassFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Blue.glassStroke, lineWidth: 1))
 
-                    MarkdownView(text: answer, baseSize: 15).textSelection(.enabled)
+                    MarkdownView(text: answer, baseSize: 15).equatable().textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxWidth: 760, alignment: .leading)
@@ -2826,7 +2838,15 @@ private struct AdvisorPanel: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     if let answer, !answer.isEmpty {
-                        MarkdownView(text: answer).textSelection(.enabled)
+                        if loading {
+                            // Streaming fast path: verbatim text is near-free to relayout; the
+                            // markdown parse happens exactly ONCE, when the stream finishes.
+                            Text(verbatim: answer)
+                                .font(Blue.body(14)).foregroundStyle(Blue.ink)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        } else {
+                            MarkdownView(text: answer).equatable().textSelection(.enabled)
+                        }
                     }
                     if loading {
                         HStack(spacing: 0) { StreamingCaret(); Spacer(minLength: 0) }
@@ -2839,7 +2859,11 @@ private struct AdvisorPanel: View {
                     Color.clear.frame(height: 1).id("end")
                 }
             }
-            .onChange(of: answer) { _, _ in scrollToEnd(proxy) }
+            .onChange(of: answer) { _, _ in
+                // While streaming, follow-scroll INSTANTLY — an animated scroll per flush stacks
+                // interrupted 0.25s animations and forces extra layout passes at 10Hz × seats.
+                if loading { proxy.scrollTo("end", anchor: .bottom) } else { scrollToEnd(proxy) }
+            }
         }
     }
 
@@ -4364,14 +4388,12 @@ private struct OnboardingCard: View {
 }
 
 private struct StreamingCaret: View {
-    @State private var on = true
+    // Static on purpose: the growing text IS the liveness signal. A repeatForever blink kept the
+    // compositor from ever idling between streaming commits (part of the RenderBox stall).
     var body: some View {
         Rectangle().fill(Blue.ink)
             .frame(width: 7, height: 14)
-            .opacity(on ? 1 : 0.04)
-            .onAppear {
-                withAnimation(Motion.pulse.repeatForever(autoreverses: true)) { on = false }
-            }
+            .opacity(0.7)
             .accessibilityHidden(true)
     }
 }
@@ -4398,7 +4420,7 @@ private struct ShareCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Rectangle().fill(Blue.glassStroke).frame(height: 1)
-            MarkdownView(text: markdown, baseSize: 14)
+            MarkdownView(text: markdown, baseSize: 14).equatable()
                 .frame(maxWidth: .infinity, alignment: .leading)
             if watermark {
                 HStack {
