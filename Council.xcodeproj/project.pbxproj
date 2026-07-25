@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		AA10000000000000000000C1 /* CouncilKit in Frameworks */ = {isa = PBXBuildFile; productRef = AA10000000000000000000C2 /* CouncilKit */; };
 		AA20000000000000000000D3 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = AA20000000000000000000D2 /* Sparkle */; };
+		AA30000000000000000000E3 /* Engram in Frameworks */ = {isa = PBXBuildFile; productRef = AA30000000000000000000E2 /* Engram */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,6 +31,7 @@
 			files = (
 				AA10000000000000000000C1 /* CouncilKit in Frameworks */,
 				AA20000000000000000000D3 /* Sparkle in Frameworks */,
+				AA30000000000000000000E3 /* Engram in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -74,6 +76,7 @@
 			packageProductDependencies = (
 				AA10000000000000000000C2 /* CouncilKit */,
 				AA20000000000000000000D2 /* Sparkle */,
+				AA30000000000000000000E2 /* Engram */,
 			);
 			productName = Council;
 			productReference = 279208292FC7CA6F00F811F6 /* Council.app */;
@@ -108,6 +111,7 @@
 			packageReferences = (
 				AA10000000000000000000C3 /* XCLocalSwiftPackageReference "CouncilKit" */,
 				AA20000000000000000000D1 /* XCRemoteSwiftPackageReference "Sparkle" */,
+				AA30000000000000000000E1 /* XCRemoteSwiftPackageReference "Engram" */,
 			);
 			projectDirPath = "";
 			projectRoot = "";
@@ -338,7 +342,7 @@
 			repositoryURL = "https://github.com/albertofettucini/CouncilKit.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 0.1.0;
+				minimumVersion = 0.2.0;
 			};
 		};
 /* End XCLocalSwiftPackageReference section */
@@ -350,6 +354,14 @@
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 2.6.0;
+			};
+		};
+		AA30000000000000000000E1 /* XCRemoteSwiftPackageReference "Engram" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/albertofettucini/Engram.git";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 0.1.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -364,6 +376,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = AA10000000000000000000C3 /* XCRemoteSwiftPackageReference "CouncilKit" */;
 			productName = CouncilKit;
+		};
+		AA30000000000000000000E2 /* Engram */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA30000000000000000000E1 /* XCRemoteSwiftPackageReference "Engram" */;
+			productName = Engram;
 		};
 /* End XCSwiftPackageProductDependency section */
 

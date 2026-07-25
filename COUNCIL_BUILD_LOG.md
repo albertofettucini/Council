@@ -1,5 +1,11 @@
 # COUNCIL — Build Log
 
+> **Historical.** This log stops at the pre-1.0 build. Divergence, synthesis, persistent history,
+> the devil's-advocate seat, the decision journal, the guest seat and the neutral chair have all
+> shipped since — and the engine has moved out into the CouncilKit package, so the file tree below
+> no longer matches the repo. Kept as a build diary, not a status report; see the README for what
+> is actually live.
+
 Native macOS (SwiftUI) uygulaması. Bu dosya, Council üzerinde yaptığımız çalışmanın kaydıdır.
 _Konum: proje kökü (`Council/COUNCIL_BUILD_LOG.md`) — Xcode synced source klasörünün dışında, build'e dahil değil._
 

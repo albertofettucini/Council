@@ -15,6 +15,10 @@
 	<true/>
 	<key>com.apple.security.files.user-selected.read-write</key>
 	<true/>
+	<!-- App-scoped security bookmarks: the optional Engram connection keeps access to the
+	     user-picked Engram folder across launches (the user grants it ONCE in Settings). -->
+	<key>com.apple.security.files.bookmarks.app-scope</key>
+	<true/>
 	<key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
 	<array>
 		<string>$(PRODUCT_BUNDLE_IDENTIFIER)-spks</string>

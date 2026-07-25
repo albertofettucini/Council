@@ -8,7 +8,8 @@ answer the same question **in parallel**, optionally critique each other, and th
   gates for real Liquid Glass; falls back to `.material` on older systems).
 - **Stack:** SwiftUI · Observation (`@Observable`) · Swift Concurrency
   (`async`/`await`, `withTaskGroup`) · Keychain · `URLSession.bytes` SSE streaming.
-- **Repo state:** ~4,250 LOC across 14 Swift files. Build clean, 0 warnings.
+- **Repo state:** the app is 6 Swift files (~5,700 lines); the engine lives in the CouncilKit
+  package (13 files, ~3,800 lines) and is shared with the `council` CLI. Build clean, 0 warnings.
 
 ---
 
@@ -262,11 +263,12 @@ intact. Not yet run end-to-end against live keys; not yet notarized (needs the d
 Developer ID — see `DISTRIBUTION.md`).
 
 ### Still on the roadmap
-- **C — On-device Apple model seat** (Foundation Models) — modeled, not wired.
-- **B — Selective deliberation** (choose which seats deliberate) — not started.
-- **D — Decision journal** — in-app badge first (spend alert is the first notification piece).
-- Deferred polish: parse markdown once on completion; lazy/indexed session loading;
-  reuse a single SSE `JSONDecoder`.
+
+Shipped since this was written: the on-device Apple seat, the decision journal (plus outcome
+reminders), selective deliberation, the guest seat, the neutral chair, and parse-markdown-once.
+
+Still open: more local backends out of the box; recalling past decisions when a new question
+resembles an old one; lazy/indexed session loading.
 
 ## 7. Scroll-performance pass (Session 3)
 
@@ -343,8 +345,6 @@ always-on animation can tax an entire glassy UI far more than the glass itself.
   to the public "Joseph" persona. A security/privacy pass confirmed API keys live only in
   the Keychain and nothing sensitive ships.
 - Release build clean (0 warnings).
-- **Pending before the repo goes public:** git history still carries the dev's real commit
-  email — author identity to be rewritten to the final pseudonymous handle before any push.
 
 ---
 

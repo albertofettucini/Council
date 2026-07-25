@@ -1,22 +1,35 @@
-# Council — Distribution (sign · notarize · staple for GitHub Releases)
+# Council — Distribution (how a release is built and published)
 
-Goal: a `.zip` users can download from GitHub and open with **no Gatekeeper warning**.
-The project is already set up for this — Hardened Runtime is on, the App Sandbox is on
-with the right entitlements (network client + user-selected files read-write), and the
-deployment target is macOS 14.0 so it runs on the broad install base.
+Council ships **ad-hoc signed** — there is no paid Apple certificate, on purpose. macOS therefore
+shows a one-time "unidentified developer" prompt and users open with right-click → Open (or
+System Settings → "Open Anyway"). Every update after that goes through Sparkle.
 
-You run the steps below **once** to set up credentials, then `notarize.sh` each release.
+Hardened Runtime is on, the App Sandbox is on with the entitlements the app actually needs
+(network client, user-selected files read-write, app-scope bookmarks for the optional Engram
+folder grant, library validation off, and Sparkle's two mach-lookup exceptions), and the
+deployment target is macOS 14.0.
+
+The notarized path is documented further down and stays available for the day a Developer ID
+identity is in play — it is **not** what ships today.
 
 ---
 
 ## Automated releases (GitHub Actions) — the default path
 
-`.github/workflows/release.yml` makes a release one command: **push a SemVer tag.**
+`.github/workflows/release.yml` builds and publishes on a SemVer tag:
 
 ```sh
 git tag v1.1.3
 git push origin v1.1.3
 ```
+
+**Two repos, in this order.** The engine is its own package, so an app release that includes engine
+changes is not one command:
+
+1. In [CouncilKit](https://github.com/albertofettucini/CouncilKit): commit, `git tag 0.2.0`, push both.
+2. In this repo: point the CouncilKit package reference at that version, re-resolve so
+   `Package.resolved` pins it, commit, then tag and push `vX.Y.Z` — the workflow takes it from there.
+3. After the Release is up, bump the Homebrew cask (Step 5 below) — CI does not touch it.
 
 On that tag the workflow (on a `macos-26` runner): builds `Council.app` (Release, **ad-hoc** signed —
 the project already uses `CODE_SIGN_IDENTITY = "-"`, so no paid Apple cert is needed), zips it, signs
@@ -46,12 +59,12 @@ ID identity is in play — run `notarize.sh` locally and upload its stapled zip 
 | Item | State |
 |---|---|
 | Hardened Runtime | ✅ on (`ENABLE_HARDENED_RUNTIME = YES`) |
-| App Sandbox + entitlements | ✅ sandbox + `network.client` + `files.user-selected.read-write` |
+| App Sandbox + entitlements | ✅ sandbox · `network.client` · `files.user-selected.read-write` · `files.bookmarks.app-scope` (Engram grant) · library validation off · Sparkle mach-lookups |
 | Deployment target | ✅ macOS 14.0 |
-| `exportOptions.plist` + `notarize.sh` | ✅ in `scripts/` |
-| **Developer ID Application certificate** | ❌ **not on this Mac** — only "Apple Development" exists |
-| **notarytool credentials** | ❌ not stored yet |
-| Team ID | ⚠️ project = `YOUR_TEAM_ID`, but the only cert here is personal team `YOUR_TEAM_ID` — pick one |
+| `exportOptions.plist` + `notarize.sh` | ✅ in `scripts/` (unused by the shipping path) |
+| **Developer ID Application certificate** | ❌ none — by design, the project stays pseudonymous |
+| **notarytool credentials** | ❌ none — see above |
+| Team ID | ✅ none, on purpose — `CODE_SIGN_IDENTITY = "-"`, so the shipped build embeds no team |
 
 ---
 
@@ -125,3 +138,22 @@ create-dmg --volname "Council" --app-drop-link 450 180 \
 ## Re-signing for each new release
 Bump `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` in the project, then re-run Step 3.
 Steps 1–2 are one-time.
+
+---
+
+## Step 5 — Bump the Homebrew cask (manual, every release)
+
+The README's first install line is `brew install --cask albertofettucini/council/council`, and the
+tap is live — but CI does **not** touch it. `Casks/council.rb` in
+[albertofettucini/homebrew-council](https://github.com/albertofettucini/homebrew-council) pins
+`version` and `sha256` by hand, so until you bump it every `brew install` still fetches the previous
+release.
+
+```sh
+# after the GitHub Release is published
+shasum -a 256 Council-1.2.0-macOS.zip     # or copy the SHA the workflow printed
+# edit Casks/council.rb: version "1.2.0", sha256 "…"
+brew style --fix Casks/council.rb
+git commit -am "council 1.2.0" && git push
+brew fetch --cask albertofettucini/council/council   # verify the checksum matches
+```

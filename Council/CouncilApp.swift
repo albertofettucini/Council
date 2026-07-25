@@ -25,6 +25,12 @@ struct CouncilApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView(store: store)
+                // Session writes are coalesced (see CouncilStore.scheduleSessionWrite); quitting
+                // must not drop one that is still queued.
+                .onReceive(NotificationCenter.default.publisher(
+                    for: NSApplication.willTerminateNotification)) { _ in
+                    store.flushPendingWrite()
+                }
         }
         .windowStyle(.hiddenTitleBar)   // immersive, brutalist — content goes edge to edge
         .windowResizability(.contentMinSize)

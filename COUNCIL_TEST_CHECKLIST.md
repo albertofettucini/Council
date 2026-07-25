@@ -1,5 +1,9 @@
 # Council — Test Kontrol Listesi
 
+> **Historical.** A manual pass written against a pre-1.0 build — several screens it walks through
+> (the project-name setup screen, the old stage navigation) no longer exist, and nothing added since
+> v1.0 is covered. Kept as a record of how the app was hand-tested at the time.
+
 > Test ederken kutucukları işaretle. **⚠ işaretliler = bu turda düzelttiğim ince bug'lar**, onlara özellikle bak.
 
 ## 0. Hazırlık

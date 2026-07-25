@@ -35,23 +35,34 @@ Gemini and more — each answers independently, and then the interesting part be
 6. **Synthesis & Dissent.** A decision-ready distillation — plus the outlier's full answer spotlighted, because the majority can be confidently wrong together.
 7. **You decide — and log it.** Record your decision in the journal, and later, how it actually turned out.
 
+### Bring an outside answer
+
+Already have an answer from ChatGPT, Gemini, or anything else? Paste it in as a **guest seat**. It
+takes a place at the table as one more anonymous advisor — the council critiques it blind, without
+knowing it came from outside, and it counts in the divergence score, the dissent, and the synthesis.
+One connected advisor plus a guest is already a council of two.
+
 ## Features
 
 - 🧠 **Twelve backends** — Claude · GPT (OpenAI) · Gemini · DeepSeek · Grok (xAI) · Mistral · Perplexity · OpenRouter · Ollama (local, needs [Ollama](https://ollama.com) running) · Apple Intelligence (on-device, free — needs macOS 26 on Apple-silicon) · two **custom OpenAI-compatible endpoints** (llama.cpp, LM Studio, vLLM, a second Ollama box — with a test-connection button that pulls the server's real model list)
 - ⚡ **Live streaming** answers, side by side
 - 🎭 **Distinct personas** per seat (Analyst · Practitioner · Skeptic) for real divergence — not three ways of saying the same thing
+- 🎭 **Guest seat** — paste an answer from any other AI; it's blind-reviewed as one more anonymous advisor
+- ⚖️ **Neutral chair** (optional) — a model that moderates instead of answering: it writes the divergence and synthesis, and closes a debate with a neutral summary
 - 😈 **Devil's Advocate** role to pressure-test the consensus
 - 📊 **Divergence score** — 0–100 how far apart the council landed, camps, and the outlier; agreement, not correctness
 - 🗣️ **Bounded debate** — one optional rebuttal round; original answers stay tucked underneath so you see what moved
+- ☑️ **Selective deliberation** — after reading the answers, choose which of them go into peer review
 - ❗ **Dissent** — the outlier's full answer, surfaced on its own to judge for yourself
-- 📓 **Decision journal** — log what you chose, then come back and record how it turned out (local only)
+- 📓 **Decision journal** — log what you chose, set a reminder, then come back and record how it turned out (local only)
 - 🧭 **Two layouts** — Flow (one page; analysis appears beneath the answers) or Classic (each stage its own screen)
 - 🖼️ **Vision** — drop in an image for the models that support it
 - 📎 **Attach a document** — add a `.md`/`.txt` to your question (or drag it in) and the whole council reads it before weighing in; the file stays out of your saved history
 - 💸 **Calm cost estimate** — a running token/$ tally, your spend at a glance, and an optional spend alert
 - 📤 **Export** — Markdown, PDF, image, or a paste-ready **decision memo**; **share councils** as importable presets
 - ⌨️ **`council` CLI** — the same engine in your terminal: pipe documents in, get JSON out, gate CI on divergence
-- 🔄 **In-app updates** — new versions install from inside the app
+- 🔄 **In-app updates** — new versions install from inside the app (it's an unsigned build, so macOS won't hand the new version the old one's Keychain items — Council asks you to re-enter your keys once, inline)
+- 🔗 **Engram bridge** (optional) — if you already run [Engram](https://github.com/albertofettucini/Engram), a journal decision can be written into your local Engram store, so your other AI tools can recall it
 - 💾 **Local history** of every session (CLI runs land there too)
 - 🪟 **Native SwiftUI** — real Liquid Glass on macOS 26, a graceful material fallback on 14+
 
@@ -60,7 +71,7 @@ Gemini and more — each answers independently, and then the interesting part be
 Council is **100% local. No account, no server, no telemetry.**
 
 - Your API keys live **only in the macOS Keychain.** They're masked in the UI and are **never** written to disk, exports, logs, or session files.
-- Each key is sent **only** to that provider's own endpoint, over HTTPS (Ollama stays on `localhost`).
+- Each key is sent **only** to that provider's own endpoint, over HTTPS. Local backends — Ollama and your own OpenAI-compatible servers — go wherever you point them, which is `localhost` unless you change it in Settings.
 - You pay the providers directly with your own keys — Council never sits in the middle.
 
 Don't have a key yet? Council links you straight to each provider's console from the key-entry step.
@@ -88,7 +99,7 @@ open Council.xcodeproj   # Xcode 16+ (Xcode 26 for the Liquid Glass build)
 # ⌘R to run
 ```
 
-Two SPM dependencies, both resolved automatically by Xcode: **Sparkle** (in-app updates) and **CouncilKit** (the engine — a separate package at [github.com/albertofettucini/CouncilKit](https://github.com/albertofettucini/CouncilKit), shared with the CLI). Otherwise pure SwiftUI + Foundation.
+Three SPM dependencies, all resolved automatically by Xcode: **Sparkle** (in-app updates), **CouncilKit** (the engine — a separate package at [github.com/albertofettucini/CouncilKit](https://github.com/albertofettucini/CouncilKit), shared with the CLI), and **Engram** (only for the optional decision-memory bridge). Otherwise pure SwiftUI + Foundation.
 
 ## CLI
 
@@ -103,6 +114,8 @@ council keys set claude                      # keys go to the macOS Keychain (sh
 council "should we ship now or wait?" --seats claude,gpt,gemini
 council "review this" --file design.md --md  # attach a document, get a decision memo
 cat design.md | council "review this"        # …or pipe it in on stdin
+council "..." --guest chatgpt-answer.txt     # seat an outside answer in the blind review
+council "..." --chair claude                 # a neutral chair moderates instead of answering
 council "..." --json                         # structured output (schema council.cli.v1)
 council "..." --fail-above 40                # CI gate: exit 1 if the council diverges too much
 ```
@@ -119,9 +132,8 @@ shows the real fault line, and Synthesis hands you a decision-ready summary.
 
 ## Roadmap
 
-- Selective deliberation — review only the seats you choose
 - More local backends out of the box
-- Outcome reminders — revisit journal decisions after a set time
+- Recall past decisions when a new question resembles an old one
 
 ## Contributing
 

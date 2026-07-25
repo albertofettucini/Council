@@ -31,3 +31,6 @@ APIKeys.plist
 
 # Logs
 *.log
+
+# Local-only audit report (contains machine paths) — never publish
+COUNCIL_AUDIT_*.md
