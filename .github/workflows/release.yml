@@ -164,15 +164,17 @@ jobs:
           set -euo pipefail
           TAG="${{ steps.meta.outputs.tag }}"
           VERSION="${{ steps.meta.outputs.version }}"
-          NOTES="$(cat <<EOF
-          Council ${VERSION} — ask several LLMs one question; they answer in parallel, peer-review each other blind, and you see how much they disagree.
+          # Notes go through a file: the runner's /bin/bash is 3.2, which chokes on an apostrophe
+          # inside a here-doc that sits inside "$(...)" (that is exactly how 1.3.0's first run died).
+          cat > release-notes.md <<'EOF'
+          Council VERSION_PLACEHOLDER — ask several LLMs one question; they answer in parallel, peer-review each other blind, and you see how much they disagree.
 
-          **Install:** download \`${ZIP}\` below, unzip, drag Council.app to Applications, and open it once. macOS will say it "could not verify" the app (it's unsigned — no paid Apple cert): click Done, then System Settings → Privacy & Security → scroll to Security → **Open Anyway**, and confirm with your password. Do it within the hour — the button goes away after that. It updates itself after that via Sparkle. Want to skip the dance? \`xattr -dr com.apple.quarantine /Applications/Council.app\`, or \`brew install --cask --no-quarantine albertofettucini/council/council\`. On macOS 14, right-click → Open still works.
+          **Install:** download `ZIP_PLACEHOLDER` below, unzip, drag Council.app to Applications, and open it once. macOS will say it "could not verify" the app (unsigned — no paid Apple cert): click Done, then System Settings → Privacy & Security → scroll to Security → **Open Anyway**, and confirm with your password. Do it within the hour — the button goes away after that. Updates itself via Sparkle from then on. Want to skip the dance? `xattr -dr com.apple.quarantine /Applications/Council.app`, or `brew install --cask --no-quarantine albertofettucini/council/council`. On macOS 14, right-click → Open still works.
           EOF
-          )"
+          sed -i '' -e "s/VERSION_PLACEHOLDER/${VERSION}/g" -e "s/ZIP_PLACEHOLDER/${ZIP}/g" release-notes.md
           ASSETS=("$ZIP" "$ZIP.sha256")
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "${ASSETS[@]}" --clobber
           else
-            gh release create "$TAG" "${ASSETS[@]}" --title "Council ${VERSION}" --notes "$NOTES"
+            gh release create "$TAG" "${ASSETS[@]}" --title "Council ${VERSION}" --notes-file release-notes.md
           fi
