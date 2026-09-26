@@ -109,7 +109,7 @@
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 2792082A2FC7CA6F00F811F6 /* Products */;
 			packageReferences = (
-				AA10000000000000000000C3 /* XCLocalSwiftPackageReference "CouncilKit" */,
+				AA10000000000000000000C3 /* XCRemoteSwiftPackageReference "CouncilKit" */,
 				AA20000000000000000000D1 /* XCRemoteSwiftPackageReference "Sparkle" */,
 				AA30000000000000000000E1 /* XCRemoteSwiftPackageReference "Engram" */,
 			);
@@ -271,7 +271,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 10106;
+				CURRENT_PROJECT_VERSION = 10300;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -285,7 +285,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.1.6;
+				MARKETING_VERSION = 1.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.joseph.Council;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -307,7 +307,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 10106;
+				CURRENT_PROJECT_VERSION = 10300;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -321,7 +321,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.1.6;
+				MARKETING_VERSION = 1.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.joseph.Council;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -342,7 +342,7 @@
 			repositoryURL = "https://github.com/albertofettucini/CouncilKit.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 0.2.0;
+				minimumVersion = 0.3.0;
 			};
 		};
 /* End XCLocalSwiftPackageReference section */
@@ -353,7 +353,7 @@
 			repositoryURL = "https://github.com/sparkle-project/Sparkle";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 2.6.0;
+				minimumVersion = 2.10.0;
 			};
 		};
 		AA30000000000000000000E1 /* XCRemoteSwiftPackageReference "Engram" */ = {

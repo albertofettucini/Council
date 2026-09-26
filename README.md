@@ -54,7 +54,7 @@ One connected advisor plus a guest is already a council of two.
 - 🗣️ **Bounded debate** — one optional rebuttal round; original answers stay tucked underneath so you see what moved
 - ☑️ **Selective deliberation** — after reading the answers, choose which of them go into peer review
 - ❗ **Dissent** — the outlier's full answer, surfaced on its own to judge for yourself
-- 📓 **Decision journal** — log what you chose, set a reminder, then come back and record how it turned out (local only)
+- 📓 **Decision journal** — log what you chose, set a reminder, and macOS notifies you when it's time to record how it turned out (local only, no account)
 - 🧭 **Two layouts** — Flow (one page; analysis appears beneath the answers) or Classic (each stage its own screen)
 - 🖼️ **Vision** — drop in an image for the models that support it
 - 📎 **Attach a document** — add a `.md`/`.txt` to your question (or drag it in) and the whole council reads it before weighing in; the file stays out of your saved history
@@ -86,7 +86,9 @@ brew install --cask albertofettucini/council/council
 
 **Or download** the macOS build from the [latest release](../../releases/latest), unzip it, and drag `Council.app` to Applications. Requires **macOS 14 or later**.
 
-> ⚠️ **First launch:** Council isn't signed with a paid Apple certificate (it's a free, solo, open-source project), so macOS Gatekeeper warns once. To open it: **right-click `Council.app` → Open → Open**, or **System Settings → Privacy & Security → "Open Anyway"**. It opens normally after that. (Installing with Homebrew? Add `--no-quarantine` to skip this.)
+> ⚠️ **First launch:** Council isn't signed with a paid Apple certificate (it's a free, solo, open-source project), so macOS blocks it the first time. Open `Council.app` once; when macOS says it "could not verify" the app, click **Done**. Then go to **System Settings → Privacy & Security**, scroll down to **Security**, click **Open Anyway** next to the Council message, and confirm with your password or Touch ID. Do it right away — that button only shows for about an hour after the blocked launch. It opens normally after that. (Still on macOS 14? Right-click `Council.app` → Open works there too.)
+>
+> Want to skip that step? `brew install --cask --no-quarantine albertofettucini/council/council`, or after a manual download: `xattr -dr com.apple.quarantine /Applications/Council.app`.
 >
 > Rather build it yourself? The whole app is in this repo — see [Build from source](#build-from-source).
 
@@ -95,7 +97,7 @@ brew install --cask albertofettucini/council/council
 ```sh
 git clone https://github.com/albertofettucini/Council.git
 cd Council
-open Council.xcodeproj   # Xcode 16+ (Xcode 26 for the Liquid Glass build)
+open Council.xcodeproj   # Xcode 26 or later (the Liquid Glass path needs the macOS 26 SDK; the built app still runs on macOS 14+)
 # ⌘R to run
 ```
 

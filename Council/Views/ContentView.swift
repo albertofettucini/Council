@@ -424,6 +424,14 @@ struct ContentView: View {
         .preferredColorScheme(scheme)
         .background { shortcutButtons }
         .onAppear { if !didOnboard { showOnboarding = true } }   // instant insert; the card animates itself in
+        // A click on an outcome-reminder notification lands on that decision's journal card.
+        .onReceive(NotificationCenter.default.publisher(for: .councilOpenSession)) { note in
+            if let id = note.object as? UUID { openReminderTarget(id) }
+        }
+        .onAppear {
+            // Window was closed (or the app cold-launched) when the notification was clicked.
+            if let id = ReminderClick.pendingSessionID { openReminderTarget(id) }
+        }
         .overlay {
             if showOnboarding {
                 OnboardingCard {
@@ -1950,10 +1958,20 @@ struct ContentView: View {
         }
     }
 
+    /// Land on the decision a reminder notification was about. If a council is running, the session
+    /// can't be switched (engine guard) — the Journal still opens, with the card under OUTCOME DUE.
+    private func openReminderTarget(_ id: UUID) {
+        ReminderClick.pendingSessionID = nil
+        guard let s = store.sessions.first(where: { $0.id == id }) else { return }
+        if s.id != store.currentSession { store.openSession(s) }
+        screen = .journal
+    }
+
     /// One journal card with every closure wired — decision/outcome/reminder, and the optional
     /// Engram hand-off when a connection exists.
     private func journalCard(_ s: Session, isCurrent: Bool) -> some View {
         JournalEntryCard(session: s, isCurrent: isCurrent,
+                         notificationsOff: store.reminderNotificationsDenied,
                          onSaveDecision: { store.recordDecision($0, for: s.id) },
                          onSaveOutcome: { store.recordOutcome($0, for: s.id) },
                          onSetReminder: { store.setReminder($0, for: s.id) },
@@ -2951,6 +2969,8 @@ struct ContentView: View {
 private struct JournalEntryCard: View {
     let session: Session
     let isCurrent: Bool
+    /// macOS notifications are switched off for Council → say so next to the reminder, once.
+    var notificationsOff: Bool = false
     let onSaveDecision: (String) -> Void
     let onSaveOutcome: (String) -> Void
     var onSetReminder: ((Date?) -> Void)? = nil
@@ -2964,12 +2984,13 @@ private struct JournalEntryCard: View {
     @State private var customDate = Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date()
     @State private var engramError: String?
 
-    init(session: Session, isCurrent: Bool,
+    init(session: Session, isCurrent: Bool, notificationsOff: Bool = false,
          onSaveDecision: @escaping (String) -> Void, onSaveOutcome: @escaping (String) -> Void,
          onSetReminder: ((Date?) -> Void)? = nil,
          onRememberEngram: (() -> String?)? = nil) {
         self.session = session
         self.isCurrent = isCurrent
+        self.notificationsOff = notificationsOff
         self.onSaveDecision = onSaveDecision
         self.onSaveOutcome = onSaveOutcome
         self.onSetReminder = onSetReminder
@@ -3034,14 +3055,23 @@ private struct JournalEntryCard: View {
                     Text("REMIND ME").font(Blue.mono(8, .bold)).tracking(1.5).foregroundStyle(Blue.dim)
                     reminderChip("1W") { onSetReminder(Calendar.current.date(byAdding: .day, value: 7, to: Date())) }
                     reminderChip("1M") { onSetReminder(Calendar.current.date(byAdding: .month, value: 1, to: Date())) }
-                    reminderChip("CUSTOM") { showCustomDate = true }
+                    reminderChip("CUSTOM") {
+                        // Fresh default every time: a card that sat on screen for hours would
+                        // otherwise open with a stale @State date.
+                        customDate = Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date()
+                        showCustomDate = true
+                    }
                         .popover(isPresented: $showCustomDate, arrowEdge: .bottom) {
                             VStack(alignment: .leading, spacing: 10) {
                                 Text("REMIND ON").font(Blue.mono(9, .bold)).tracking(1.5).foregroundStyle(Blue.sub)
-                                DatePicker("", selection: $customDate, in: Date()..., displayedComponents: .date)
+                                // Day AND time: a reminder is a real macOS notification now, so
+                                // "Friday 09:00" has to be expressible, not just "Friday".
+                                DatePicker("", selection: $customDate, in: Date()..., displayedComponents: [.date, .hourAndMinute])
                                     .datePickerStyle(.field).labelsHidden()
                                 Button {
-                                    onSetReminder(customDate)
+                                    // The picker's lower bound was evaluated when it opened; by SET time
+                                    // that minute may have passed. Never store a reminder in the past.
+                                    onSetReminder(max(customDate, Date().addingTimeInterval(60)))
                                     showCustomDate = false
                                 } label: {
                                     Text("SET").font(Blue.mono(10, .bold)).tracking(1).foregroundStyle(Blue.paper)
@@ -3060,6 +3090,19 @@ private struct JournalEntryCard: View {
                     if let r = session.remindAt {
                         Text(r <= Date() ? "outcome due" : "reminder · \(Self.fmt.string(from: r))")
                             .font(Blue.mono(9)).foregroundStyle(Blue.dim)
+                    }
+                }
+                if notificationsOff, session.remindAt != nil {
+                    // Ad-hoc builds can lose the grant after an update; the in-app due list still works.
+                    HStack(spacing: 6) {
+                        Text("Notifications are off for Council — you'll see this under OUTCOME DUE instead.")
+                            .font(Blue.mono(9)).foregroundStyle(Blue.dim)
+                        Button("Open System Settings") {
+                            if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") {
+                                NSWorkspace.shared.open(url)
+                            }
+                        }
+                        .buttonStyle(.plain).font(Blue.mono(9, .bold)).foregroundStyle(Blue.sub)
                     }
                 }
             }

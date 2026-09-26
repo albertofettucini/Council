@@ -1,8 +1,10 @@
 # Council — Distribution (how a release is built and published)
 
 Council ships **ad-hoc signed** — there is no paid Apple certificate, on purpose. macOS therefore
-shows a one-time "unidentified developer" prompt and users open with right-click → Open (or
-System Settings → "Open Anyway"). Every update after that goes through Sparkle.
+blocks the first launch ("could not verify"): users click Done, then System Settings → Privacy &
+Security → scroll to Security → "Open Anyway" (the button only shows for about an hour after the
+blocked launch), and confirm with their password. Right-click → Open still works on macOS 14 but
+not on 15 or later. Every update after that goes through Sparkle.
 
 Hardened Runtime is on, the App Sandbox is on with the entitlements the app actually needs
 (network client, user-selected files read-write, app-scope bookmarks for the optional Engram
@@ -23,15 +25,29 @@ git tag v1.1.3
 git push origin v1.1.3
 ```
 
+**Before every release:**
+
+1. `git fetch origin && git merge --ff-only origin/main` — CI commits the appcast back to `main`, so local
+   `main` is usually one commit behind. Never force-push over it.
+2. Tag and push the engine (CouncilKit) first, then the app.
+3. If the app was built against the LOCAL engine during development (`XCLocalSwiftPackageReference`
+   with `relativePath = "../CouncilKit-dev"` in `project.pbxproj`), switch that entry back to the
+   `XCRemoteSwiftPackageReference` (repositoryURL `https://github.com/albertofettucini/CouncilKit.git`,
+   `upToNextMinorVersion`, `minimumVersion` = the engine tag you just pushed) — CI cannot see a local path.
+4. Re-resolve `Package.resolved` against that engine tag (it must now contain a `councilkit` pin) and commit it.
+5. Run the secret scan (see `COUNCIL_QA_MACOS27.md`) over all three repos — it must return nothing.
+6. After CI finishes, bump the Homebrew cask by hand (Step 5 below).
+
 **Two repos, in this order.** The engine is its own package, so an app release that includes engine
 changes is not one command:
 
-1. In [CouncilKit](https://github.com/albertofettucini/CouncilKit): commit, `git tag 0.2.0`, push both.
+1. In [CouncilKit](https://github.com/albertofettucini/CouncilKit): commit, tag the next engine version on its own 0.x line (e.g. `git tag 0.3.0`), push both.
 2. In this repo: point the CouncilKit package reference at that version, re-resolve so
    `Package.resolved` pins it, commit, then tag and push `vX.Y.Z` — the workflow takes it from there.
 3. After the Release is up, bump the Homebrew cask (Step 5 below) — CI does not touch it.
 
-On that tag the workflow (on a `macos-26` runner): builds `Council.app` (Release, **ad-hoc** signed —
+On that tag the workflow (on the `xcode-27` runner — macOS 27 + Xcode 27; `macos-26` is selectable as a fallback
+when you run it by hand): builds `Council.app` (Release, **ad-hoc** signed —
 the project already uses `CODE_SIGN_IDENTITY = "-"`, so no paid Apple cert is needed), zips it, signs
 the zip with the Sparkle **EdDSA** key, regenerates `appcast.xml` and **commits it back to `main`**
 (Council serves the appcast from `raw.githubusercontent.com/.../main/appcast.xml`), then publishes the
@@ -48,9 +64,10 @@ gh secret set SPARKLE_ED_PRIVATE_KEY -R albertofettucini/Council < sparkle_priva
 rm -f sparkle_private_key
 ```
 
-The app ships **unsigned** (ad-hoc): users get a one-time Gatekeeper "unidentified developer" prompt and
-open with right-click → Open. The **notarized** path below stays available for whenever a paid Developer
-ID identity is in play — run `notarize.sh` locally and upload its stapled zip instead.
+The app ships **unsigned** (ad-hoc): users get a one-time Gatekeeper "could not verify" block and open
+it via System Settings → Privacy & Security → "Open Anyway" (or skip it: `brew install --cask --no-quarantine`,
+or `xattr -dr com.apple.quarantine /Applications/Council.app`). The **notarized** path below stays available
+for whenever a paid Developer ID identity is in play — run `notarize.sh` locally and upload its stapled zip instead.
 
 ---
 

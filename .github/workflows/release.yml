@@ -4,41 +4,63 @@ name: Release
 # signs the zip for Sparkle, regenerates appcast.xml + commits it back to main (Council serves the
 # appcast from the repo's raw URL), and publishes a GitHub Release. No paid Apple cert: the app is
 # ad-hoc signed (the project already uses CODE_SIGN_IDENTITY "-"), so it ships UNSIGNED — Gatekeeper
-# right-click-Open. The only secret is the Sparkle EdDSA key (SPARKLE_ED_PRIVATE_KEY); notarization
-# stays a manual local step (scripts/notarize.sh) for whenever a paid identity is in play.
+# blocks the first launch and users go System Settings → Privacy & Security → Open Anyway. The only
+# secret is the Sparkle EdDSA key (SPARKLE_ED_PRIVATE_KEY); notarization stays a manual local step
+# (scripts/notarize.sh) for whenever a paid identity is in play.
 
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "Runner image"
+        default: "xcode-27"
+        type: choice
+        options: ["xcode-27", "macos-26"]
+      tag:
+        description: "Existing vX.Y.Z tag to rebuild"
+        required: false
 
 permissions:
   contents: write          # create the Release AND commit appcast.xml back to main
 
 env:
-  SPARKLE_TOOLS_VERSION: "2.9.3"   # match the app's Sparkle; `sign_update` comes from this tarball
+  SPARKLE_TOOLS_VERSION: "2.10.0"  # must equal the Sparkle version in Package.resolved (pbxproj: upToNextMajor from
+                                   # 2.10.0; Package.resolved pins 2.10.0). Bump both together. `sign_update` comes from this tarball
 
 jobs:
   release:
-    # macos-26 ships Xcode 26 / the macOS 26 SDK, needed to COMPILE the app's Liquid Glass path
-    # (`glassEffect`). The app still RUNS on macOS 14+ (guarded by `if #available`).
-    runs-on: macos-26
+    # xcode-27 = macOS 27 + the Xcode 27 SDK (public-preview label). Compiles the Liquid Glass path
+    # (`glassEffect`, macOS 26 SDK+) and leaves room for macOS-27-only APIs later.
+    # The app still RUNS on macOS 14+ (guarded by `if #available`). macos-26 stays selectable as a
+    # fallback via workflow_dispatch and produces the identical app — nothing is compiled out.
+    runs-on: ${{ github.event.inputs.runner || 'xcode-27' }}
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.inputs.tag || github.ref }}   # manual rebuild: build the named tag, not the branch
           fetch-depth: 0          # need main as a real ref to commit the appcast back
 
       - name: Resolve versions
         id: meta
+        env:
+          # via env, not inline ${{ }}, so a hand-typed dispatch input can't be injected into the script
+          INPUT_TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
+          TAG="$INPUT_TAG"
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::'$TAG' is not a vX.Y.Z tag"; exit 1
+          fi
+          VERSION="${TAG#v}"
           IFS=. read -r MA MI PA <<< "$VERSION"
           # CFBundleVersion = major*10000 + minor*100 + patch — monotonic, and > the old hand-written
           # values (1.1.2 -> 10102 > 112) so existing installs still see the update.
           SPARKLE_VERSION=$(( 10#${MA:-0}*10000 + 10#${MI:-0}*100 + 10#${PA:-0} ))
           echo "version=$VERSION"                 >> "$GITHUB_OUTPUT"
           echo "sparkle_version=$SPARKLE_VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=$GITHUB_REF_NAME"             >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG"                         >> "$GITHUB_OUTPUT"
           echo "Building Council $VERSION (CFBundleVersion $SPARKLE_VERSION)"
           xcodebuild -version || true
 
@@ -54,11 +76,25 @@ jobs:
           APP="build/Council.xcarchive/Products/Applications/Council.app"
           test -d "$APP" || { echo "::error::Council.app not found in the archive"; exit 1; }
           echo "APP=$APP" >> "$GITHUB_ENV"
-          echo "--- version stamp + arch + signature ---"
+          echo "--- version stamp + arch + signature + min OS (hard checks) ---"
           /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP/Contents/Info.plist"
-          lipo -info "$APP/Contents/MacOS/Council" || true
-          codesign -dv "$APP" 2>&1 | grep -iE 'Signature|TeamIdentifier' || true
+          assert_universal() {
+            local info; info="$(lipo -info "$1")"; echo "$info"
+            case "$info" in *x86_64*) ;; *) echo "::error::$1 is missing x86_64 (Intel users on macOS 14-27 still need it)"; exit 1;; esac
+            case "$info" in *arm64*)  ;; *) echo "::error::$1 is missing arm64"; exit 1;; esac
+          }
+          assert_universal "$APP/Contents/MacOS/Council"
+          assert_universal "$APP/Contents/Frameworks/Sparkle.framework/Versions/Current/Sparkle"
+          SIGN="$(codesign -dv "$APP" 2>&1)"
+          echo "$SIGN" | grep -iE 'Signature|TeamIdentifier' || true
+          echo "$SIGN" | grep -q 'Signature=adhoc' \
+            || { echo "::error::Council.app is not ad-hoc signed (CODE_SIGN_IDENTITY must stay \"-\")"; exit 1; }
+          if echo "$SIGN" | grep 'TeamIdentifier=' | grep -qv 'TeamIdentifier=not set'; then
+            echo "::error::Council.app embeds a TeamIdentifier — the shipped build must carry no team"; exit 1
+          fi
+          MIN_OS="$(/usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "$APP/Contents/Info.plist")"
+          [ "$MIN_OS" = "14.0" ] || { echo "::error::LSMinimumSystemVersion is '$MIN_OS', expected 14.0"; exit 1; }
 
       - name: Zip + checksum
         run: |
@@ -131,7 +167,7 @@ jobs:
           NOTES="$(cat <<EOF
           Council ${VERSION} — ask several LLMs one question; they answer in parallel, peer-review each other blind, and you see how much they disagree.
 
-          **Install:** download \`${ZIP}\` below, unzip, drag Council.app to Applications, then right-click → Open the first time (the app is unsigned — no paid Apple cert). It updates itself after that via Sparkle.
+          **Install:** download \`${ZIP}\` below, unzip, drag Council.app to Applications, and open it once. macOS will say it "could not verify" the app (it's unsigned — no paid Apple cert): click Done, then System Settings → Privacy & Security → scroll to Security → **Open Anyway**, and confirm with your password. Do it within the hour — the button goes away after that. It updates itself after that via Sparkle. Want to skip the dance? \`xattr -dr com.apple.quarantine /Applications/Council.app\`, or \`brew install --cask --no-quarantine albertofettucini/council/council\`. On macOS 14, right-click → Open still works.
           EOF
           )"
           ASSETS=("$ZIP" "$ZIP.sha256")
