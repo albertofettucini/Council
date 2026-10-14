@@ -81,7 +81,7 @@ One connected advisor plus a guest is already a council of two.
 
 ## Privacy — bring your own keys
 
-Council is **100% local. No account, no server, no telemetry.**
+**No account, no server, no telemetry.** Questions go only to the providers you pick.
 
 - Your API keys live **only in the macOS Keychain.** They're masked in the UI and are **never** written to disk, exports, logs, or session files.
 - Each key is sent **only** to that provider's own endpoint, over HTTPS. Local backends — Ollama and your own OpenAI-compatible servers — go wherever you point them, which is `localhost` unless you change it in Settings.
