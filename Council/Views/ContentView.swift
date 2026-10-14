@@ -439,10 +439,15 @@ struct ContentView: View {
         }
         .overlay {
             if showOnboarding {
-                OnboardingCard {
+                OnboardingCard(dismiss: {
                     didOnboard = true                                                  // persist (no animation needed)
                     withAnimation(Motion.cinematic) { showOnboarding = false }   // animate the blur-out
-                }
+                }, onExample: example == nil ? nil : {
+                    // Same dismiss, then straight into the example council.
+                    didOnboard = true
+                    withAnimation(Motion.cinematic) { showOnboarding = false }
+                    openExample()
+                })
                     .preferredColorScheme(scheme)
                     .transition(.revealBlur)   // slow blur-out, matching the reveal feel
             }
@@ -1023,9 +1028,12 @@ struct ContentView: View {
     private var recentList: some View {
         Group {
             if store.sessions.isEmpty {
-                Text("No sessions yet — pick a question from the hero above to begin.")
-                    .font(Blue.mono(10)).foregroundStyle(Blue.dim)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("No sessions yet — pick a question from the hero above to begin.")
+                        .font(Blue.mono(10)).foregroundStyle(Blue.dim)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if example != nil { exampleRecentRow }
+                }
             } else {
                 VStack(spacing: 4) {
                     ForEach(store.sessions.prefix(4)) { s in
@@ -1141,6 +1149,48 @@ struct ContentView: View {
         .padding(.horizontal, 14)
         .frame(height: 28)
         .glassPanel(corner: 12)
+    }
+
+    /// Every entry point (onboarding, empty Home, the second-view card) opens the example here.
+    /// It never joins the history: the engine shows it read-only and refuses to run or save it.
+    private func openExample() {
+        guard let example, !isBusy else { return }
+        // Remember the saved session being left, so CLOSE can return to it. Re-opening the example
+        // from inside the example keeps the original return target.
+        if !store.isReadOnlySession {
+            let current = store.currentSession
+            exampleReturnSessionID = store.sessions.contains { $0.id == current } ? current : nil
+        }
+        guard store.openReadOnly(example.session) else { return }
+        screen = .council
+        canvasMode = .panels
+        peerReviewExpanded = false
+        guestExpanded = false
+        if !isClassic { flowProxy?.scrollTo("flow.panels", anchor: .top) }
+    }
+
+    /// The example council as one row under RECENT's empty line (a new user's first Home).
+    private var exampleRecentRow: some View {
+        Button(action: openExample) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 10) {
+                    Text("Example council")
+                        .font(Blue.mono(11, .bold)).foregroundStyle(Blue.ink).lineLimit(1)
+                    Spacer()
+                    Text("read-only").font(Blue.mono(9)).foregroundStyle(Blue.dim)
+                }
+                Text("A real recorded session: answers, blind review, divergence, dissent.")
+                    .font(Blue.body(10)).foregroundStyle(Blue.dim)
+                    .lineLimit(1).truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.vertical, 7).padding(.horizontal, 10)
+            .glassHover(corner: 9)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isBusy)
+        .accessibilityLabel("Open the example council")
     }
 
     /// CLOSE: back to the saved session that was open before the example, or an empty council.
@@ -5262,10 +5312,22 @@ private struct OnboardingEnterButton: View {
 
 /// First-run onboarding — shown once (gated by @AppStorage "council.didOnboard"). Two beats:
 /// (1) just the COUNCIL wordmark fades up over a frosted backdrop; (2) tapping anywhere reveals
-/// the full explainer card. Lowers BYO-key friction ("one key is enough"). No canvas clutter.
+/// the full explainer card. Says what a council needs (two views; local ones are free) and offers
+/// the example council. No canvas clutter.
 private struct OnboardingCard: View {
     var dismiss: () -> Void
+    /// Opens the bundled example council; nil (no example bundled) hides the button.
+    var onExample: (() -> Void)? = nil
     @State private var appeared = false   // initial frost + wordmark fade
+
+    /// What it takes to get a council: two views, not one key. Apple Intelligence is a free second
+    /// view only on macOS 26 and later.
+    private var twoViewsLine: String {
+        if #available(macOS 26, *) {
+            return "A council needs two views: two models, or one model plus a pasted answer. Ollama is free; so is Apple Intelligence on macOS 26."
+        }
+        return "A council needs two views: two models, or one model plus a pasted answer. Ollama is free."
+    }
     @State private var revealed = false   // false = wordmark only, true = full card
 
     private func bullet(_ text: String) -> some View {
@@ -5315,17 +5377,29 @@ private struct OnboardingCard: View {
                     VStack(alignment: .leading, spacing: 11) {
                         bullet("Ask once — your advisors answer in parallel, then critique each other.")
                         bullet("Bring your own API keys. They stay in your Mac's Keychain — never sent anywhere but the model.")
-                        bullet("100% local. No account, no server, no telemetry.")
+                        bullet("No account, no server, no telemetry. Questions go only to the providers you pick.")
                     }
                     .padding(.top, 20)
 
-                    Text("One key is enough to begin — pick a model in any panel to start.")
+                    Text(twoViewsLine)
                         .font(Blue.mono(11)).foregroundStyle(Blue.dim)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 18)
 
                     OnboardingEnterButton(action: dismiss)
                         .padding(.top, 22)
+
+                    if let onExample {
+                        Button(action: onExample) {
+                            Text("SEE AN EXAMPLE COUNCIL FIRST")
+                                .font(Blue.mono(10)).tracking(2).foregroundStyle(Blue.sub)
+                                .frame(maxWidth: .infinity).padding(.vertical, 8)
+                                .glassHover(corner: 10)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.top, 10)
+                    }
                 }
                 .padding(28)
                 .frame(width: 420, alignment: .leading)
