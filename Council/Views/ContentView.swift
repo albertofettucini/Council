@@ -3362,7 +3362,7 @@ private struct InfoDot: View {
 
 private struct AdvisorPanel: View {
     let seat: Seat
-    /// Provider name stored with this round's answer (used for the title when the seat is unassigned).
+    /// Provider name stored with this round's answer. The title prefers it while that answer is shown.
     var answeredProvider: String? = nil
     /// The example council: who recorded this answer. Set → a read-only panel that names the
     /// recorded provider and model, says RECORDED, and offers no regenerate or reset.
@@ -3413,9 +3413,13 @@ private struct AdvisorPanel: View {
     /// Conversation underway → shrink the header to give the answer room.
     private var hasConversation: Bool { hasAnswer || loading || failed }
 
-    /// The panel title: on the example, the provider that recorded the answer.
+    /// The panel title names whoever wrote the answer on screen. A stored answer records its
+    /// provider, and today's seat may have changed since (a reopened session, or a seat switched
+    /// after asking): an Ollama answer must not sit under a GPT title. While streaming, or with no
+    /// answer, the seat's own provider is the one at work.
     private var titleName: String {
         if let recorded { return recorded.provider }
+        if hasAnswer, !loading, let answeredProvider { return answeredProvider }
         return seat.provider?.panelName ?? answeredProvider ?? "—"
     }
 
