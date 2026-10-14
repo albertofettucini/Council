@@ -1948,12 +1948,12 @@ struct ContentView: View {
     }
 
     /// OUTSIDE ANSWER: on the latest round, once a real advisor has answered and while it has no
-    /// guest yet. Never on the example. A one-answer round leaves it to the second-view card, whose
-    /// PASTE button is the same control (one way to do one thing).
+    /// guest yet. Never on the example. While the second-view card shows (a one-answer round), its
+    /// PASTE button is the same control, so the chip steps aside (one way to do one thing).
     private var showOutsideAnswerChip: Bool {
-        guard store.isViewingLatest, !store.isReadOnlySession,
+        guard store.isViewingLatest, !store.isReadOnlySession, !showSecondViewCard,
               let last = store.rounds.last, last.guestAnswer == nil else { return false }
-        return last.answeredSeatIDs.subtracting([Round.guestSeatID]).count >= 2
+        return !last.answeredSeatIDs.subtracting([Round.guestSeatID]).isEmpty
     }
 
     private var outsideAnswerChip: some View {
