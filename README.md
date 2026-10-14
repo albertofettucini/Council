@@ -5,9 +5,10 @@
 <h1 align="center">Council</h1>
 
 <p align="center">
-  <b>One question. A roundtable of AI minds. You decide.</b><br>
-  A native macOS app that puts the same question to several LLMs, lets them
-  critique each other blind, and shows you where they agree — and where they don't.
+  <b>Several AIs answer. Council shows you where they disagree.</b><br>
+  A native macOS app that asks several different models the same question, has them review
+  each other blind, scores how far apart they landed, and puts the lone dissenter in front of
+  you instead of averaging it away.
 </p>
 
 <p align="center">
@@ -15,6 +16,15 @@
   <img alt="Swift 6" src="https://img.shields.io/badge/Swift-6-1a1a2e">
   <img alt="SwiftUI" src="https://img.shields.io/badge/SwiftUI-native-1a1a2e">
   <img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-1a1a2e">
+</p>
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/hero-dark.png">
+    <img src="docs/hero-light.png" width="860" alt="A real Council session: three models answer side by side, the divergence score lands with the outlier named, and the dissenting answer is shown on its own.">
+  </picture>
+  <br>
+  <sub>One real, unedited session, recorded 14 Oct 2026 with Claude (claude-sonnet-4-6), GPT (gpt-5.4-mini) and Ollama (llama3.2). It ships inside the app as the example council.</sub>
 </p>
 
 ---
@@ -37,9 +47,11 @@ Gemini and more — each answers independently, and then the interesting part be
 
 ### Bring an outside answer
 
-Already have an answer from ChatGPT, Gemini, or anything else? Paste it in as a **guest seat**. It
-takes a place at the table as one more anonymous advisor — the council critiques it blind, without
-knowing it came from outside, and it counts in the divergence score, the dissent, and the synthesis.
+Already asked ChatGPT, Claude or Gemini? Paste that answer in as a **guest seat**, before you ask
+or after the council has answered (**Outside answer** on the latest round). It takes a place at
+the table as one more anonymous advisor: the council reviews it blind, without knowing it came
+from outside, and it counts in the divergence score, the dissent and the synthesis. Adding it
+after the round clears that round's analysis, so you run it again with the guest included.
 One connected advisor plus a guest is already a council of two.
 
 ## Features
@@ -47,13 +59,14 @@ One connected advisor plus a guest is already a council of two.
 - 🧠 **Twelve backends** — Claude · GPT (OpenAI) · Gemini · DeepSeek · Grok (xAI) · Mistral · Perplexity · OpenRouter · Ollama (local, needs [Ollama](https://ollama.com) running) · Apple Intelligence (on-device, free — needs macOS 26 on Apple-silicon) · two **custom OpenAI-compatible endpoints** (llama.cpp, LM Studio, vLLM, a second Ollama box — with a test-connection button that pulls the server's real model list)
 - ⚡ **Live streaming** answers, side by side
 - 🎭 **Distinct personas** per seat (Analyst · Practitioner · Skeptic) for real divergence — not three ways of saying the same thing
-- 🎭 **Guest seat** — paste an answer from any other AI; it's blind-reviewed as one more anonymous advisor
+- 🎭 **Guest seat** — paste an answer from any other AI, before or after the round; it's blind-reviewed as one more anonymous advisor
 - ⚖️ **Neutral chair** (optional) — a model that moderates instead of answering: it writes the divergence and synthesis, and closes a debate with a neutral summary
 - 😈 **Devil's Advocate** role to pressure-test the consensus
 - 📊 **Divergence score** — 0–100 how far apart the council landed, camps, and the outlier; agreement, not correctness
 - 🗣️ **Bounded debate** — one optional rebuttal round; original answers stay tucked underneath so you see what moved
 - ☑️ **Selective deliberation** — after reading the answers, choose which of them go into peer review
 - ❗ **Dissent** — the outlier's full answer, surfaced on its own to judge for yourself
+- 🧪 **Example council** — a real recorded session ships with the app, clearly labelled and read-only, so you can see a full council before adding a single key
 - 📓 **Decision journal** — log what you chose, set a reminder, and macOS notifies you when it's time to record how it turned out (local only, no account)
 - 🧭 **Two layouts** — Flow (one page; analysis appears beneath the answers) or Classic (each stage its own screen)
 - 🖼️ **Vision** — drop in an image for the models that support it
@@ -130,9 +143,12 @@ CLI runs land in the app's history, so you can reopen them in the UI. `council -
 
 > *"Should a two-person startup adopt microservices on day one?"*
 
-Claude weighs the trade-offs, GPT pushes back on premature complexity, Gemini brings
-the ops angle. The peer-review round catches where one of them overreached, Divergence
-shows the real fault line, and Synthesis hands you a decision-ready summary.
+In the recorded run, Claude, GPT and a local Ollama model all say no: start with a modular
+monolith. Each one reviews the other two blind, the score shows how close they landed, and the
+dissent card still puts Ollama's answer in front of you, because its "no" leaves more room for
+exceptions than the other two. Synthesis hands you a decision-ready summary.
+
+This exact question is the example council inside the app. Open it from the welcome card, or from Home until your first session, to see the full run: answers, blind review, the score and the dissent.
 
 ## Roadmap
 
