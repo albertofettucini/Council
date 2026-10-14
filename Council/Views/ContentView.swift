@@ -323,7 +323,10 @@ struct ContentView: View {
     @State private var showImagePreview = false
 
     /// Optional text/markdown document attached to the next directive. Like the image, it rides on
-    /// the request to every seat and is NOT saved into history — only the typed question is.
+    /// the request to every seat. Unlike the image, the engine keeps a document of up to
+    /// CouncilLimits.maxStoredAttachmentCharacters on the round (Round.attachedDocument) so
+    /// Regenerate can re-ask the same question; a larger one, or one sent with an image, is not
+    /// saved (the round keeps only the hadAttachment flag).
     @State private var pickedDocument: PickedDocument?
     /// Surfaced when an attached document is rejected (too large / unreadable).
     @State private var docError: String?

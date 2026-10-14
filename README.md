@@ -70,7 +70,7 @@ One connected advisor plus a guest is already a council of two.
 - 📓 **Decision journal** — log what you chose, set a reminder, and macOS notifies you when it's time to record how it turned out (local only, no account)
 - 🧭 **Two layouts** — Flow (one page; analysis appears beneath the answers) or Classic (each stage its own screen)
 - 🖼️ **Vision** — drop in an image for the models that support it
-- 📎 **Attach a document** — add a `.md`/`.txt` to your question (or drag it in) and the whole council reads it before weighing in; the file stays out of your saved history
+- 📎 **Attach a document** — add a `.md`/`.txt` to your question (or drag it in) and the whole council reads it before weighing in; documents up to 20,000 characters are kept with the session so Regenerate can re-ask, while larger ones and images are never saved
 - 💸 **Calm cost estimate** — a running token/$ tally, your spend at a glance, and an optional spend alert
 - 📤 **Export** — Markdown, PDF, image, or a paste-ready **decision memo**; **share councils** as importable presets
 - ⌨️ **`council` CLI** — the same engine in your terminal: pipe documents in, get JSON out, gate CI on divergence
