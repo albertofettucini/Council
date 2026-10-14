@@ -35,6 +35,16 @@ extension Notification.Name {
 /// receive clicks. Without a delegate a reminder that fires while Council is frontmost is swallowed
 /// silently, and a click on one would only bring the app forward.
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    /// The app's one store, handed over when the first window appears. Quitting flushes it here,
+    /// not in a view, so a write still queued lands even after the last window was closed (⌘W).
+    @MainActor weak var store: CouncilStore?
+
+    /// Session writes are coalesced (see CouncilStore.scheduleSessionWrite); quitting must not drop
+    /// one that is still queued. flushPendingWrite returns once everything is on disk.
+    @MainActor func applicationWillTerminate(_ notification: Notification) {
+        store?.flushPendingWrite()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         let center = UNUserNotificationCenter.current()
         center.delegate = self
@@ -80,12 +90,9 @@ struct CouncilApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView(store: store)
-                // Session writes are coalesced (see CouncilStore.scheduleSessionWrite); quitting
-                // must not drop one that is still queued.
-                .onReceive(NotificationCenter.default.publisher(
-                    for: NSApplication.willTerminateNotification)) { _ in
-                    store.flushPendingWrite()
-                }
+                // The quit flush lives in AppDelegate.applicationWillTerminate (it must work with no
+                // window open); hand it the store.
+                .onAppear { appDelegate.store = store }
                 // Coming back from System Settings (notifications switched on/off) or from an update:
                 // re-read the grant and re-sync the pending reminders. Idempotent and cheap.
                 .onReceive(NotificationCenter.default.publisher(
