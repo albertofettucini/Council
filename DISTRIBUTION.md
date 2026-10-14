@@ -65,8 +65,8 @@ rm -f sparkle_private_key
 ```
 
 The app ships **unsigned** (ad-hoc): users get a one-time Gatekeeper "could not verify" block and open
-it via System Settings → Privacy & Security → "Open Anyway" (or skip it: `brew install --cask --no-quarantine`,
-or `xattr -dr com.apple.quarantine /Applications/Council.app`). The **notarized** path below stays available
+it via System Settings → Privacy & Security → "Open Anyway" (or skip it after installing, from Homebrew or a
+download: `xattr -dr com.apple.quarantine /Applications/Council.app`). The **notarized** path below stays available
 for whenever a paid Developer ID identity is in play — run `notarize.sh` locally and upload its stapled zip instead.
 
 ---

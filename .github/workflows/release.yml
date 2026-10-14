@@ -169,7 +169,7 @@ jobs:
           cat > release-notes.md <<'EOF'
           Council VERSION_PLACEHOLDER — ask several LLMs one question; they answer in parallel, peer-review each other blind, and you see how much they disagree.
 
-          **Install:** download `ZIP_PLACEHOLDER` below, unzip, drag Council.app to Applications, and open it once. macOS will say it "could not verify" the app (unsigned — no paid Apple cert): click Done, then System Settings → Privacy & Security → scroll to Security → **Open Anyway**, and confirm with your password. Do it within the hour — the button goes away after that. Updates itself via Sparkle from then on. Want to skip the dance? `xattr -dr com.apple.quarantine /Applications/Council.app`, or `brew install --cask --no-quarantine albertofettucini/council/council`. On macOS 14, right-click → Open still works.
+          **Install:** download `ZIP_PLACEHOLDER` below, unzip, drag Council.app to Applications, and open it once. macOS will say it "could not verify" the app (unsigned — no paid Apple cert): click Done, then System Settings → Privacy & Security → scroll to Security → **Open Anyway**, and confirm with your password. Do it within the hour — the button goes away after that. Updates itself via Sparkle from then on. Want to skip the dance? After installing (download or Homebrew), run `xattr -dr com.apple.quarantine /Applications/Council.app`. On macOS 14, right-click → Open still works.
           EOF
           sed -i '' -e "s/VERSION_PLACEHOLDER/${VERSION}/g" -e "s/ZIP_PLACEHOLDER/${ZIP}/g" release-notes.md
           ASSETS=("$ZIP" "$ZIP.sha256")

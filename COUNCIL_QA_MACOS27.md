@@ -7,7 +7,7 @@ Rows marked *second Mac* can't be verified on the build machine (macOS 27) — b
 |---|---|---|---|
 | 1 | Fresh zip, real quarantine | Download the release zip **in Safari**, unzip, drag `Council.app` to Applications, open it → macOS says it "could not verify" → **Done** → System Settings → Privacy & Security → scroll to Security → **Open Anyway** (within the hour) → password → app opens, onboarding card shows | [ ] |
 | 2 | Homebrew, quarantined | `brew install --cask albertofettucini/council/council` → caveats text prints → first launch needs the same Open Anyway path as row 1 → opens | [ ] |
-| 2 | Homebrew, `--no-quarantine` | `brew install --cask --no-quarantine albertofettucini/council/council` → opens straight away, no Gatekeeper prompt | [ ] |
+| 2 | Homebrew, quarantine cleared | `brew install --cask albertofettucini/council/council`, then `xattr -dr com.apple.quarantine /Applications/Council.app` → opens straight away, no Gatekeeper prompt (Homebrew no longer has `--no-quarantine`) | [ ] |
 | 3 | Sparkle hop from 1.2.0 | On an installed 1.2.0: Check for Updates sees 1.3.0 → installs → relaunches → **no Gatekeeper prompt** → the one-time **RE-ENTER THESE KEYS** sheet appears (every ad-hoc build has a new signature, so the keychain generation advances by exactly one) → keys re-entered inline work → no sheet on the next relaunch | [ ] |
 | 4 | Apple seat on macOS 27 | Apple Intelligence seat answers a plain text question on macOS 27 (model rebuilt in 27; image input is NOT in 1.3 — the attached image is dropped for this seat exactly as in 1.2) | [ ] |
 | 5 | Reminder: permission | Set **1W** on a journal card → the notification permission dialog appears **once** (not again on the next card) | [ ] |

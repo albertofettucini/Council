@@ -103,7 +103,7 @@ brew install --cask albertofettucini/council/council
 
 > ⚠️ **First launch:** Council isn't signed with a paid Apple certificate (it's a free, solo, open-source project), so macOS blocks it the first time. Open `Council.app` once; when macOS says it "could not verify" the app, click **Done**. Then go to **System Settings → Privacy & Security**, scroll down to **Security**, click **Open Anyway** next to the Council message, and confirm with your password or Touch ID. Do it right away — that button only shows for about an hour after the blocked launch. It opens normally after that. (Still on macOS 14? Right-click `Council.app` → Open works there too.)
 >
-> Want to skip that step? `brew install --cask --no-quarantine albertofettucini/council/council`, or after a manual download: `xattr -dr com.apple.quarantine /Applications/Council.app`.
+> Want to skip that step? After installing (Homebrew or download), run `xattr -dr com.apple.quarantine /Applications/Council.app`.
 >
 > Rather build it yourself? The whole app is in this repo — see [Build from source](#build-from-source).
 
