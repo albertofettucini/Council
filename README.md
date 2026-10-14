@@ -18,15 +18,6 @@
   <img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-1a1a2e">
 </p>
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/hero-dark.png">
-    <img src="docs/hero-light.png" width="860" alt="A real Council session: three models answer side by side, the divergence score lands with the outlier named, and the dissenting answer is shown on its own.">
-  </picture>
-  <br>
-  <sub>One real, unedited session, recorded 14 Oct 2026 with Claude (claude-sonnet-4-6), GPT (gpt-5.4-mini) and Ollama (llama3.2). It ships inside the app as the example council.</sub>
-</p>
-
 ---
 
 ## The idea
