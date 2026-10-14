@@ -6,6 +6,18 @@
   <channel>
     <title>Council</title>
     <item>
+      <title>1.3.1</title>
+      <sparkle:version>10301</sparkle:version>
+      <sparkle:shortVersionString>1.3.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <link>https://github.com/albertofettucini/Council/releases/tag/v1.3.1</link>
+      <enclosure
+        url="https://github.com/albertofettucini/Council/releases/download/v1.3.1/Council-1.3.1-macOS.zip"
+        sparkle:edSignature="8fcvPFAHIQvj8AgaDxXr4tauT1+apCHBK0XisEkq8zhJtoGNs73XF11drWhVX76XYnCy8jwP2IPcVT/kwtt9Ag=="
+        length="7858541"
+        type="application/octet-stream"/>
+    </item>
+    <item>
       <title>1.3.0</title>
       <sparkle:version>10300</sparkle:version>
       <sparkle:shortVersionString>1.3.0</sparkle:shortVersionString>
