@@ -1180,7 +1180,10 @@ struct ContentView: View {
             let current = store.currentSession
             exampleReturnSessionID = store.sessions.contains { $0.id == current } ? current : nil
         }
-        guard store.openReadOnly(example.session) else { return }
+        // The recorded model ids, so exports name what answered, not this viewer's seats.
+        let models = Dictionary(example.seats.filter { !$0.model.isEmpty }.map { ($0.seatID, $0.model) },
+                                uniquingKeysWith: { first, _ in first })
+        guard store.openReadOnly(example.session, models: models) else { return }
         screen = .council
         canvasMode = .panels
         peerReviewExpanded = false
