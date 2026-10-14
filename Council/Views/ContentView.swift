@@ -350,8 +350,9 @@ struct ContentView: View {
     /// The viewed round's guest card in the flow — collapsed by default, like peer review.
     @State private var guestExpanded = false
     /// What the guest sheet is for: staging a guest for the NEXT question (the composer's masks
-    /// button), or pasting an outside answer into the LATEST round after it answered. The second
-    /// mode has its own drafts, so it never overwrites a guest staged for the next question.
+    /// button), or seating an outside answer in the LATEST round after it answered (the second-view
+    /// card's PASTE, the guest card's REPLACE). The second mode has its own drafts, so it never
+    /// overwrites a guest staged for the next question.
     enum GuestSheetMode: Equatable { case stage, addToLatest(replacing: Bool) }
     @State private var guestSheetMode: GuestSheetMode = .stage
     @State private var outsideDraft = ""
@@ -1943,39 +1944,10 @@ struct ContentView: View {
             Text(store.viewedQuestion)
                 .font(Blue.mono(10)).foregroundStyle(Blue.sub).lineLimit(1).truncationMode(.tail)
             Spacer()
-            if showOutsideAnswerChip { outsideAnswerChip }
             exportMenu.offset(y: layout.exportY)   // EXPORT can be nudged independently
         }
         // offset (not padding) so moving this row never pushes the panels — they stay put.
         .offset(y: layout.roundBarTop)
-    }
-
-    /// OUTSIDE ANSWER: on the latest round, once a real advisor has answered and while it has no
-    /// guest yet. Never on the example. While the second-view card shows (a one-answer round), its
-    /// PASTE button is the same control, so the chip steps aside (one way to do one thing).
-    private var showOutsideAnswerChip: Bool {
-        guard store.isViewingLatest, !store.isReadOnlySession, !showSecondViewCard,
-              let last = store.rounds.last, last.guestAnswer == nil else { return false }
-        return !last.answeredSeatIDs.subtracting([Round.guestSeatID]).isEmpty
-    }
-
-    private var outsideAnswerChip: some View {
-        Button { openOutsideAnswerSheet(replacing: false) } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "plus").font(.system(size: 7, weight: .bold))
-                Text("OUTSIDE ANSWER").font(Blue.mono(8, .bold)).tracking(1)
-            }
-            .foregroundStyle(isBusy ? Blue.dim : Blue.sub)
-            .padding(.horizontal, 7).padding(.vertical, 2.5)
-            .glassHover(corner: 7)
-            .background(.ultraThinMaterial, in: Capsule())
-            .overlay(Capsule().strokeBorder(Blue.glassStroke, lineWidth: 1))
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .disabled(isBusy)
-        .help("Paste another AI's answer into this round. It joins blind review as one more anonymous advisor; any analysis on this round is cleared so you can re-run it.")
-        .accessibilityLabel("Add an outside answer to this round")
     }
 
     /// A quiet outlined chip marking that the viewed round already has this artifact (DIV / SYN).
@@ -3069,8 +3041,8 @@ struct ContentView: View {
         .background(Blue.bg)
     }
 
-    /// OUTSIDE ANSWER (round bar), REPLACE (guest card) and PASTE (second-view card): the guest
-    /// sheet in after-the-fact mode, on the latest round. A new guest starts from empty drafts;
+    /// PASTE (second-view card) and REPLACE (guest card): the guest sheet in after-the-fact mode,
+    /// on the latest round. A new guest starts from empty drafts;
     /// REPLACE starts from the current guest.
     private func openOutsideAnswerSheet(replacing: Bool) {
         guard !isBusy, !store.isReadOnlySession, store.isViewingLatest else { return }
