@@ -342,7 +342,7 @@
 			repositoryURL = "https://github.com/albertofettucini/CouncilKit.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 0.3.0;
+				minimumVersion = 0.3.1;
 			};
 		};
 /* End XCLocalSwiftPackageReference section */
