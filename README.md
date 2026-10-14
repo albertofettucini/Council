@@ -48,11 +48,11 @@ Gemini and more — each answers independently, and then the interesting part be
 ### Bring an outside answer
 
 Already asked ChatGPT, Claude or Gemini? Paste that answer in as a **guest seat** before you ask
-(the 🎭 button by the question box). If only one advisor answered, the second-view card under the
-round lets you paste one into that round instead. It takes a place at the table as one more
-anonymous advisor: the council reviews it blind, without knowing it came from outside, and it
-counts in the divergence score, the dissent and the synthesis. Adding or replacing a guest after
-the round clears that round's analysis, so you run it again with the guest included.
+(the 🎭 button by the question box). If only one advisor answered your latest question, the
+second-view card under that round lets you paste one into it instead. It takes a place at the
+table as one more anonymous advisor: the council reviews it blind, without knowing it came from
+outside, and it counts in the divergence score, the dissent and the synthesis. Adding or replacing
+a guest after the round clears that round's analysis, so you run it again with the guest included.
 One connected advisor plus a guest is already a council of two.
 
 ## Features
