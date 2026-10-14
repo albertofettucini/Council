@@ -1299,6 +1299,9 @@ struct ContentView: View {
         if store.hasDissent {
             dissentFlowCard.id("stage.dissent").transition(.opacity)
         }
+        if showSecondViewCard {
+            secondViewCard.transition(.opacity)
+        }
         if showRunAnalysis {
             runAnalysisCard
         }
@@ -1408,15 +1411,13 @@ struct ContentView: View {
     @ViewBuilder private var classicCanvas: some View {
         switch canvasMode {
         case .panels:
-            // A guest answer rides under the panels as the same collapsed card the flow uses —
-            // panels give up a sliver of height only when a guest actually exists.
-            if store.viewedGuestAnswer != nil {
-                VStack(spacing: 12) {
-                    panelGrid
-                    if let g = store.viewedGuestAnswer { guestFlowCard(g) }
-                }
-            } else {
+            // A guest answer (or the second-view card) rides under the panels as the same card the
+            // flow uses; panels give up a sliver of height only when one actually shows. One VStack
+            // either way, so the panels keep their identity (and state) as cards come and go.
+            VStack(spacing: 12) {
                 panelGrid
+                if let g = store.viewedGuestAnswer { guestFlowCard(g) }
+                if showSecondViewCard { secondViewCard }
             }
         case .peerReview:
             peerReviewView
@@ -2341,6 +2342,94 @@ struct ContentView: View {
         }
         .padding(.horizontal, 20).padding(.vertical, 13)
         .glassPanel(corner: 22)
+    }
+
+    // MARK: Second view (one answer isn't a council)
+
+    /// The viewed round holds exactly one stored advisor answer and no guest: there is nothing to
+    /// compare it with yet. Counted from stored answers (the engine), never from today's keys.
+    private var showSecondViewCard: Bool {
+        store.viewedRoundNeedsSecondView && store.pipelineStage == nil
+    }
+
+    /// A connected seat that has no answer in the latest round: ASK {PROVIDER} TOO fills it in place
+    /// (regenerate(seatID:)), so the round that hit the cliff is the one that gets compared, with no
+    /// second round and no second answer from the first seat. nil on older rounds and on rounds
+    /// whose attachment Council didn't keep (they can't be re-asked).
+    private var secondViewAskSeat: Seat? {
+        guard store.isViewingLatest, !store.viewedRoundHadAttachment else { return nil }
+        _ = store.keyRevision
+        return store.seats.first { seat in
+            guard let p = seat.provider, store.hasKey(seat), !store.latestRoundAnswered(seat.id) else { return false }
+            if p == .foundationModels {
+                if #available(macOS 26, *) { return true }
+                return false   // Apple Intelligence can't answer before macOS 26
+            }
+            return true
+        }
+    }
+
+    /// How the card names a provider in ASK … TOO and its help text.
+    private func askName(_ p: LLMProvider) -> String {
+        p == .foundationModels ? "Apple Intelligence" : p.panelName
+    }
+
+    private var secondViewOptions: String {
+        if #available(macOS 26, *) {
+            return "Free options: a local Ollama model or Apple Intelligence on another panel, or paste another AI's answer."
+        }
+        return "Free option: a local Ollama model on another panel, or paste another AI's answer."
+    }
+
+    /// Under a one-answer round: why it isn't a council yet, and the ways to add a second view.
+    /// Grayscale, no filled button; nothing runs without a click.
+    private var secondViewCard: some View {
+        let latest = store.isViewingLatest
+        let askSeat = secondViewAskSeat
+        return HStack(spacing: 12) {
+            Image(systemName: "person.2").font(.system(size: 14, weight: .light)).foregroundStyle(Blue.sub)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("SECOND VIEW").font(Blue.mono(10, .bold)).tracking(1.5).foregroundStyle(Blue.ink)
+                Text("One answer isn't a council yet. Add a second view to compare.")
+                    .font(Blue.body(10)).foregroundStyle(Blue.dim)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(secondViewOptions)
+                    .font(Blue.body(10)).foregroundStyle(Blue.dim)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 8)
+            if let seat = askSeat, let p = seat.provider {
+                secondViewButton("ASK \(askName(p).uppercased()) TOO",
+                                 help: "Ask \(askName(p)) this same question in this round.") {
+                    runRound { await store.regenerate(seatID: seat.id) }
+                }
+            }
+            if latest {
+                secondViewButton("PASTE ANOTHER AI'S ANSWER",
+                                 help: "Paste ChatGPT's, Claude's or Gemini's answer into this round. It joins blind review as one more anonymous advisor.") {
+                    openOutsideAnswerSheet(replacing: false)
+                }
+            }
+            if example != nil {
+                secondViewButton("SEE AN EXAMPLE COUNCIL", help: nil) { openExample() }
+            }
+        }
+        .padding(.horizontal, 20).padding(.vertical, 13)
+        .glassPanel(corner: 22)
+    }
+
+    /// The card's text buttons: the existing REGENERATE style.
+    @ViewBuilder private func secondViewButton(_ label: String, help: String?,
+                                               _ action: @escaping () -> Void) -> some View {
+        let button = Button(action: action) {
+            Text(label).font(Blue.mono(9, .bold)).tracking(1).foregroundStyle(Blue.sub)
+                .lineLimit(1).fixedSize()
+                .padding(.horizontal, 8).padding(.vertical, 5)
+                .glassHover(corner: 8).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isBusy)
+        if let help { button.help(help) } else { button }
     }
 
     private var analysisSubtitle: String {
