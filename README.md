@@ -47,11 +47,12 @@ Gemini and more — each answers independently, and then the interesting part be
 
 ### Bring an outside answer
 
-Already asked ChatGPT, Claude or Gemini? Paste that answer in as a **guest seat**, before you ask
-or after the council has answered (**Outside answer** on the latest round). It takes a place at
-the table as one more anonymous advisor: the council reviews it blind, without knowing it came
-from outside, and it counts in the divergence score, the dissent and the synthesis. Adding it
-after the round clears that round's analysis, so you run it again with the guest included.
+Already asked ChatGPT, Claude or Gemini? Paste that answer in as a **guest seat** before you ask
+(the 🎭 button by the question box). If only one advisor answered, the second-view card under the
+round lets you paste one into that round instead. It takes a place at the table as one more
+anonymous advisor: the council reviews it blind, without knowing it came from outside, and it
+counts in the divergence score, the dissent and the synthesis. Adding or replacing a guest after
+the round clears that round's analysis, so you run it again with the guest included.
 One connected advisor plus a guest is already a council of two.
 
 ## Features
@@ -59,7 +60,7 @@ One connected advisor plus a guest is already a council of two.
 - 🧠 **Twelve backends** — Claude · GPT (OpenAI) · Gemini · DeepSeek · Grok (xAI) · Mistral · Perplexity · OpenRouter · Ollama (local, needs [Ollama](https://ollama.com) running) · Apple Intelligence (on-device, free — needs macOS 26 on Apple-silicon) · two **custom OpenAI-compatible endpoints** (llama.cpp, LM Studio, vLLM, a second Ollama box — with a test-connection button that pulls the server's real model list)
 - ⚡ **Live streaming** answers, side by side
 - 🎭 **Distinct personas** per seat (Analyst · Practitioner · Skeptic) for real divergence — not three ways of saying the same thing
-- 🎭 **Guest seat** — paste an answer from any other AI, before or after the round; it's blind-reviewed as one more anonymous advisor
+- 🎭 **Guest seat** — paste an answer from any other AI before you ask, or into a one-answer round; it's blind-reviewed as one more anonymous advisor
 - ⚖️ **Neutral chair** (optional) — a model that moderates instead of answering: it writes the divergence and synthesis, and closes a debate with a neutral summary
 - 😈 **Devil's Advocate** role to pressure-test the consensus
 - 📊 **Divergence score** — 0–100 how far apart the council landed, camps, and the outlier; agreement, not correctness
