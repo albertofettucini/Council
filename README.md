@@ -78,6 +78,8 @@ Don't have a key yet? Council links you straight to each provider's console from
 
 ## Install
 
+> **Official downloads come only from this repo's [Releases](../../releases) and the `albertofettucini/council` Homebrew tap.** Look-alike "Council" repos elsewhere on GitHub are not this project. Don't run their downloads.
+
 **Homebrew** — one command:
 
 ```sh
