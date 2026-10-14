@@ -347,6 +347,11 @@ struct ContentView: View {
     /// The viewed round's guest card in the flow — collapsed by default, like peer review.
     @State private var guestExpanded = false
 
+    /// The bundled example council (nil hides every entry point to it).
+    private let example = ExampleCouncil.bundled
+    /// The saved session that was open before the example: CLOSE goes back to it.
+    @State private var exampleReturnSessionID: UUID?
+
     /// Appearance: "light" (default) or "dark". Toggled from Settings, not the main screen.
     @AppStorage("council.appearance") private var appearance = "light"
     /// Whether exported share images carry the "made with Council" watermark (default on).
@@ -1070,6 +1075,7 @@ struct ContentView: View {
 
     private var mainCanvas: some View {
         VStack(spacing: layout.canvasRowGap) {
+            if store.isReadOnlySession { exampleBanner }
             if store.roundCount > 0 { roundNavigator }
             Group {
                 if isClassic { classicCanvas } else { sessionFlow }
@@ -1090,6 +1096,64 @@ struct ContentView: View {
             if !isClassic { flowProxy?.scrollTo("flow.panels", anchor: .top) }
         }
 
+    }
+
+    // MARK: Example council (read-only)
+
+    /// Who wrote the divergence and synthesis on screen. The example names its recorded synthesizer;
+    /// today's setting would credit a model that never saw it.
+    private var viaName: String? {
+        store.isReadOnlySession ? example?.synthesizer : store.synthesizerName
+    }
+
+    /// Who chaired the viewed round. Same rule: on the example, the recording, never today's chair.
+    private var chairNameShown: String? {
+        guard store.isReadOnlySession else { return store.viewedChairName }
+        let round = store.rounds.indices.contains(store.viewingRound) ? store.rounds[store.viewingRound] : nil
+        return round?.chairProvider ?? example?.chair
+    }
+
+    /// The provider + model that recorded a seat's answer on the example; nil for every live session.
+    private func recordedSeat(_ seatID: Int) -> (provider: String, model: String)? {
+        guard store.isReadOnlySession, store.viewedAnswer(seatID)?.isEmpty == false else { return nil }
+        if let s = example?.seat(seatID) { return (s.provider, s.model) }
+        return store.viewedAnswerProvider(seatID).map { ($0, "") }
+    }
+
+    /// One quiet row above the round bar while the example is open: what it is, and the way out.
+    private var exampleBanner: some View {
+        HStack(spacing: 8) {
+            Text("EXAMPLE COUNCIL").font(Blue.mono(10, .bold)).tracking(1.5).foregroundStyle(Blue.ink)
+            Text("· read-only · \(example?.label ?? "")")
+                .font(Blue.mono(9)).foregroundStyle(Blue.sub)
+                .lineLimit(1).truncationMode(.tail)
+                .help("A real session, recorded with the models named here and shipped inside Council. Nothing here is saved.")
+            Spacer(minLength: 8)
+            Button(action: closeExample) {
+                Text("CLOSE").font(Blue.mono(9, .bold)).tracking(1).foregroundStyle(Blue.sub)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .glassHover(corner: 8).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(isBusy)
+            .accessibilityLabel("Close the example council")
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 28)
+        .glassPanel(corner: 12)
+    }
+
+    /// CLOSE: back to the saved session that was open before the example, or an empty council.
+    /// Either way the view stays on the council screen.
+    private func closeExample() {
+        guard store.isReadOnlySession, !isBusy else { return }
+        if let id = exampleReturnSessionID, let s = store.sessions.first(where: { $0.id == id }) {
+            store.openSession(s)
+        } else {
+            store.newSession()
+        }
+        exampleReturnSessionID = nil
+        canvasMode = .panels
     }
 
     private func stageAnchor(_ stage: String) -> String? {
@@ -1224,7 +1288,7 @@ struct ContentView: View {
     private var chairSummaryFlowCard: some View {
         VStack(alignment: .leading, spacing: 0) {
             stageHeader("CHAIR SUMMARY", info: chairInfo,
-                        subtitle: store.viewedChairName.map { "via \($0.uppercased()) — the chair" })
+                        subtitle: chairNameShown.map { "via \($0.uppercased()) — the chair" })
             MarkdownView(text: store.chairSummaryText ?? "", baseSize: 14).equatable().textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(20)
@@ -1399,7 +1463,7 @@ struct ContentView: View {
                                 HStack(spacing: 8) {
                                     Text("CHAIR SUMMARY").font(Blue.mono(11, .bold)).tracking(1).foregroundStyle(Blue.ink)
                                     InfoDot(text: chairInfo)
-                                    if let n = store.viewedChairName {
+                                    if let n = chairNameShown {
                                         Text("· via \(n.uppercased())").font(Blue.mono(9)).foregroundStyle(Blue.sub)
                                     }
                                     Spacer()
@@ -1457,7 +1521,7 @@ struct ContentView: View {
             HStack(spacing: 10) {
                 Text(title).font(Blue.mono(15, .bold)).tracking(2).foregroundStyle(Blue.ink)
                 InfoDot(text: info)
-                if let n = store.synthesizerName, text != nil {
+                if let n = viaName, text != nil {
                     Text("· via \(n.uppercased())").font(Blue.mono(9)).foregroundStyle(Blue.sub)
                 }
                 if let error, !loading {
@@ -1465,7 +1529,8 @@ struct ContentView: View {
                         .lineLimit(1).truncationMode(.tail)
                 }
                 Spacer()
-                if text != nil && !loading {
+                // A recording can't be regenerated: nothing runs against the example.
+                if text != nil && !loading && !store.isReadOnlySession {
                     Button(action: onGenerate) {
                         HStack(spacing: 5) {
                             Image(systemName: "arrow.clockwise").font(.system(size: 9, weight: .bold))
@@ -1568,7 +1633,7 @@ struct ContentView: View {
                 InfoDot(text: peerReviewInfo)
                 Text("· advisors critique each other").font(Blue.mono(9)).foregroundStyle(Blue.sub)
                 Spacer()
-                if store.hasPeerReviewForViewedRound && !peerReviewGenerating {
+                if store.hasPeerReviewForViewedRound && !peerReviewGenerating && !store.isReadOnlySession {
                     Button { runRound { await store.peerReview() } } label: {
                         HStack(spacing: 5) {
                             Image(systemName: "arrow.clockwise").font(.system(size: 9, weight: .bold))
@@ -1620,7 +1685,7 @@ struct ContentView: View {
                         .multilineTextAlignment(.center).lineSpacing(2).frame(maxWidth: 400)
                     Text("Not generated for this round yet.")
                         .font(Blue.mono(9)).tracking(1).foregroundStyle(Blue.dim)
-                    if deliberationChoices.count > 2 {
+                    if deliberationChoices.count > 2 && !store.isReadOnlySession {
                         seatSelectionChips.fixedSize()
                     }
                     Button { runRound { await store.peerReview() } } label: {
@@ -1677,12 +1742,15 @@ struct ContentView: View {
 
                     AdvisorPanel(seat: seat,
                                  answeredProvider: store.viewedAnswerProvider(seat.id),
+                                 recorded: recordedSeat(seat.id),
                                  answer: store.viewedAnswer(seat.id),
                                  loading: store.generatingRound == store.viewingRound && store.status[seat.id] == .loading && store.pipelineStage == nil,
                                  failedMessage: panelFailure(seat.id),
                                  connected: connected(seat),
-                                 canRegenerate: store.isViewingLatest && !store.viewedRoundHadAttachment,
-                                 isAdversary: store.devilsAdvocateSeatID == seat.id,
+                                 canRegenerate: store.isViewingLatest && !store.viewedRoundHadAttachment
+                                     && !store.isReadOnlySession,
+                                 // Today's devil's advocate setting says nothing about a recording.
+                                 isAdversary: !store.isReadOnlySession && store.devilsAdvocateSeatID == seat.id,
                                  // Tag only when the round actually deliberated without this seat.
                                  satOut: !store.isSeatDeliberating(seat.id)
                                      && store.viewedAnswer(seat.id)?.isEmpty == false
@@ -1919,7 +1987,9 @@ struct ContentView: View {
                     ForEach(due) { s in journalCard(s, isCurrent: false) }
                 }
 
-                if store.hasSession, let cur = store.sessions.first(where: { $0.id == store.currentSession }) {
+                // The example council is on screen but isn't the user's session: no card for it.
+                let hasOwnSession = store.hasSession && !store.isReadOnlySession
+                if hasOwnSession, let cur = store.sessions.first(where: { $0.id == store.currentSession }) {
                     journalCard(cur, isCurrent: true)
                         // Re-key the card to the session: without this, switching sessions reuses the
                         // card's @State (draft text + edit mode) from the PREVIOUS session.
@@ -1944,7 +2014,7 @@ struct ContentView: View {
                         .padding(.vertical, 12)
                 }
 
-                if !store.hasSession && past.isEmpty {
+                if !hasOwnSession && past.isEmpty {
                     VStack(spacing: 8) {
                         Image(systemName: "book.closed").font(.system(size: 28, weight: .light)).foregroundStyle(Blue.dim)
                         Text("No decisions logged yet.").font(Blue.body(14)).italic().foregroundStyle(Blue.sub)
@@ -2037,7 +2107,7 @@ struct ContentView: View {
         return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Text(name).font(Blue.mono(11, .bold)).tracking(1).foregroundStyle(Blue.ink)
-                if seat.id == store.devilsAdvocateSeatID {
+                if !store.isReadOnlySession && seat.id == store.devilsAdvocateSeatID {
                     Text("DEVIL'S ADVOCATE").font(Blue.mono(8, .bold)).tracking(1).foregroundStyle(Blue.red)
                         .padding(.horizontal, 6).padding(.vertical, 2)
                         .overlay(Capsule().strokeBorder(Blue.red.opacity(0.5), lineWidth: 1))
@@ -2074,11 +2144,12 @@ struct ContentView: View {
             if let subtitle {
                 Text("· \(subtitle)").font(Blue.mono(9)).foregroundStyle(Blue.sub)
             }
-            if showVia, let n = store.synthesizerName {
+            if showVia, let n = viaName {
                 Text("· via \(n.uppercased())").font(Blue.mono(9)).foregroundStyle(Blue.sub)
             }
             // A configured chair that couldn't run: name who actually wrote this, not who was meant to.
-            if showVia, let note = store.chairFallbackNote {
+            // (Never on the example: a note about today's chair says nothing about a recording.)
+            if showVia, !store.isReadOnlySession, let note = store.chairFallbackNote {
                 Text("· \(note)").font(Blue.mono(9)).foregroundStyle(Blue.red)
                     .lineLimit(1).truncationMode(.tail)
             }
@@ -2243,7 +2314,7 @@ struct ContentView: View {
                 .accessibilityLabel(peerReviewExpanded ? "Collapse peer review" : "Expand peer review")
                 InfoDot(text: peerReviewInfo)
                 Spacer()
-                if peerReviewExpanded {
+                if peerReviewExpanded && !store.isReadOnlySession {
                     Button { runRound { await store.peerReview() } } label: {
                         HStack(spacing: 5) {
                             Image(systemName: "arrow.clockwise").font(.system(size: 9, weight: .bold))
@@ -2278,7 +2349,7 @@ struct ContentView: View {
     private var divergenceFlowCard: some View {
         VStack(alignment: .leading, spacing: 0) {
             stageHeader("DIVERGENCE", info: divergenceInfo, showVia: true,
-                        onRegenerate: { runRound { await store.runDivergence() } },
+                        onRegenerate: store.isReadOnlySession ? nil : { runRound { await store.runDivergence() } },
                         canRegenerate: store.canSynthesize,
                         onExportImage: { copy in exportImage(title: "DIVERGENCE", text: store.divergenceText, copy: copy) })
             if let v = store.agreementScore.map({ DivergenceVerdict(divergence: 100 - $0, camps: store.divergenceCamps, outlier: store.outlierName) }) {
@@ -2301,7 +2372,7 @@ struct ContentView: View {
     private var synthesisFlowCard: some View {
         VStack(alignment: .leading, spacing: 0) {
             stageHeader("SYNTHESIS", info: synthesisInfo, showVia: true,
-                        onRegenerate: { runRound { await store.runSynthesis() } },
+                        onRegenerate: store.isReadOnlySession ? nil : { runRound { await store.runSynthesis() } },
                         canRegenerate: store.canSynthesize,
                         onExportImage: { copy in exportImage(title: "SYNTHESIS", text: store.synthesisText, copy: copy) })
             if let error = store.synthesisError {
@@ -2399,8 +2470,9 @@ struct ContentView: View {
 
     private var directiveInput: some View {
       VStack(alignment: .trailing, spacing: 6) {
-        // Quiet session usage readout, right-aligned just above the input pill.
-        if store.sessionInputTokens + store.sessionOutputTokens > 0 {
+        // Quiet session usage readout, right-aligned just above the input pill. Not on the example:
+        // those tokens were someone else's spend, not this session's.
+        if !store.isReadOnlySession, store.sessionInputTokens + store.sessionOutputTokens > 0 {
             HStack(spacing: 6) {
                 Image(systemName: "bolt").font(.system(size: 8, weight: .bold))
                 Text("\(tokenString)").font(Blue.mono(9))
@@ -2521,7 +2593,10 @@ struct ContentView: View {
                 .buttonStyle(.plain)
                 .help("Guest seat — paste another AI's answer; the council reviews it blind, as one of its own")
                 .accessibilityLabel("Add a guest answer")
-                ComposerTextView(text: $query, placeholder: "Enter a command or prompt…",
+                ComposerTextView(text: $query,
+                                 placeholder: store.isReadOnlySession
+                                     ? "Ask your own question. This starts a new session."
+                                     : "Enter a command or prompt…",
                                  onSubmit: ask, onPasteImage: { pickedImage = $0 })
                     .frame(maxWidth: .infinity)
                     .frame(height: composerHeight)
@@ -2895,6 +2970,11 @@ struct ContentView: View {
             docError = "No advisor is connected yet — start a new session (⌘N) and add a model + key on a panel."
             return
         }
+        // The example is a recording: a question of your own starts a fresh session of your own.
+        if store.isReadOnlySession {
+            store.newSession()
+            exampleReturnSessionID = nil
+        }
         let image: ImageAttachment? = pickedImage
             .flatMap(pngData(from:))
             .map { ImageAttachment(data: $0, mediaType: "image/png") }
@@ -2939,7 +3019,7 @@ struct ContentView: View {
     /// Render a deliberation artifact to a shareable PNG (current theme) and save it or copy it.
     private func exportImage(title: String, text: String?, copy: Bool) {
         guard let text, !text.isEmpty else { return }
-        let card = ShareCard(title: title, via: store.synthesizerName,
+        let card = ShareCard(title: title, via: viaName,
                              question: store.viewedQuestion, markdown: text,
                              watermark: shareWatermark)
             .environment(\.colorScheme, scheme)
@@ -3284,6 +3364,9 @@ private struct AdvisorPanel: View {
     let seat: Seat
     /// Provider name stored with this round's answer (used for the title when the seat is unassigned).
     var answeredProvider: String? = nil
+    /// The example council: who recorded this answer. Set → a read-only panel that names the
+    /// recorded provider and model, says RECORDED, and offers no regenerate or reset.
+    var recorded: (provider: String, model: String)? = nil
     let answer: String?
     let loading: Bool
     let failedMessage: String?
@@ -3330,7 +3413,14 @@ private struct AdvisorPanel: View {
     /// Conversation underway → shrink the header to give the answer room.
     private var hasConversation: Bool { hasAnswer || loading || failed }
 
+    /// The panel title: on the example, the provider that recorded the answer.
+    private var titleName: String {
+        if let recorded { return recorded.provider }
+        return seat.provider?.panelName ?? answeredProvider ?? "—"
+    }
+
     private var statusText: String {
+        if recorded != nil { return "RECORDED" }
         if seat.provider == nil { return "NO MODEL SELECTED" }
         if !connected { return "OFFLINE — KEY REQUIRED" }
         if loading { return "PROCESSING" }
@@ -3366,10 +3456,16 @@ private struct AdvisorPanel: View {
     private var panelHeader: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 3) {
-                Text((seat.provider?.panelName ?? answeredProvider ?? "—").uppercased())
+                Text(titleName.uppercased())
                     .font(Blue.mono(hasConversation ? 13 : 18, .bold)).tracking(1).foregroundStyle(Blue.ink)
                     .lineLimit(1).minimumScaleFactor(0.7).fixedSize(horizontal: false, vertical: true)
-                if connected && !showingModelPicker { modelMenu }
+                if let recorded {
+                    // The recorded model id, as plain text: there's nothing to change on a recording.
+                    if !recorded.model.isEmpty {
+                        Text(recorded.model).font(Blue.mono(9)).foregroundStyle(Blue.sub)
+                            .lineLimit(1).truncationMode(.middle)
+                    }
+                } else if connected && !showingModelPicker { modelMenu }
                 if isAdversary {
                     Text("ADVERSARY").font(Blue.mono(7, .bold)).tracking(2).foregroundStyle(Blue.dim)
                         .help("Devil's advocate — attacks the consensus in peer review")
@@ -3380,7 +3476,7 @@ private struct AdvisorPanel: View {
                 }
             }
             Spacer()
-            if seat.provider != nil && !hasConversation {
+            if recorded == nil && seat.provider != nil && !hasConversation {
                 Button {
                     // onResetSeat clears the provider → the onChange(of: seat.provider) handler
                     // resets begun/justPicked. We only clear the key-entry scratch state here.
@@ -3424,6 +3520,7 @@ private struct AdvisorPanel: View {
 
     /// Status accent color drives the pill + text tint.
     private var statusColor: Color {
+        if recorded != nil { return Blue.dim }
         if failed { return Blue.red }
         if loading { return Blue.accent }
         if hasAnswer { return Blue.ok }
@@ -3440,7 +3537,7 @@ private struct AdvisorPanel: View {
                 .font(Blue.mono(hasConversation ? 9 : 11, .bold))
                 .foregroundStyle(statusColor)
             Spacer()
-            if panelHover && canRegenerate && (hasAnswer || failed) && !loading {
+            if recorded == nil && panelHover && canRegenerate && (hasAnswer || failed) && !loading {
                 Button(action: onRegenerate) {
                     HStack(spacing: 4) {
                         Image(systemName: "arrow.clockwise").font(.system(size: 9, weight: .bold))
@@ -3989,6 +4086,8 @@ struct ComposerTextView: NSViewRepresentable {
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let tv = scroll.documentView as? PasteImageTextView else { return }
         if tv.string != text { tv.string = text; tv.needsDisplay = true }
+        // The placeholder can change while the composer is on screen (the example council's own line).
+        if tv.placeholderString != placeholder { tv.placeholderString = placeholder; tv.needsDisplay = true }
         tv.onPasteImage = onPasteImage
         tv.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
     }
