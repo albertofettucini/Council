@@ -346,6 +346,15 @@ struct ContentView: View {
     @State private var guestNameDraft = ""
     /// The viewed round's guest card in the flow — collapsed by default, like peer review.
     @State private var guestExpanded = false
+    /// What the guest sheet is for: staging a guest for the NEXT question (the composer's masks
+    /// button), or pasting an outside answer into the LATEST round after it answered. The second
+    /// mode has its own drafts, so it never overwrites a guest staged for the next question.
+    enum GuestSheetMode: Equatable { case stage, addToLatest(replacing: Bool) }
+    @State private var guestSheetMode: GuestSheetMode = .stage
+    @State private var outsideDraft = ""
+    @State private var outsideNameDraft = ""
+    /// REMOVE on a guest whose round already has analysis asks first.
+    @State private var confirmRemoveGuest = false
 
     /// The bundled example council (nil hides every entry point to it).
     private let example = ExampleCouncil.bundled
@@ -1103,6 +1112,13 @@ struct ContentView: View {
             peerReviewExpanded = false
             if !isClassic { flowProxy?.scrollTo("flow.panels", anchor: .top) }
         }
+        // REMOVE asks first only when it would also clear the round's analysis (requestRemoveGuest).
+        .alert("Remove the guest answer?", isPresented: $confirmRemoveGuest) {
+            Button("Remove", role: .destructive) { store.removeGuestAnswer() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This round's peer review and analysis will be cleared, since the blind set changes.")
+        }
 
     }
 
@@ -1300,25 +1316,45 @@ struct ContentView: View {
                                              : "pasted answer — sitting this round out")
                               : (deliberated ? "pasted answer — reviewed blind, like any advisor"
                                              : "pasted answer — joins the deliberation blind")
+        // The latest round's guest can be replaced or removed; older rounds show it as it was.
+        let editable = store.isViewingLatest && !store.isReadOnlySession && !isBusy
         return VStack(alignment: .leading, spacing: 0) {
-            Button { withAnimation(Motion.reveal) { guestExpanded.toggle() } } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold)).foregroundStyle(Blue.sub)
-                        .rotationEffect(.degrees(guestExpanded ? 90 : 0))
-                    Text("GUEST").font(Blue.mono(13, .bold)).tracking(2).foregroundStyle(Blue.ink)
-                    if satOut {
-                        Text("SAT OUT").font(Blue.mono(7, .bold)).tracking(2).foregroundStyle(Blue.dim)
+            HStack(spacing: 10) {
+                Button { withAnimation(Motion.reveal) { guestExpanded.toggle() } } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold)).foregroundStyle(Blue.sub)
+                            .rotationEffect(.degrees(guestExpanded ? 90 : 0))
+                        Text("GUEST").font(Blue.mono(13, .bold)).tracking(2).foregroundStyle(Blue.ink)
+                        if satOut {
+                            Text("SAT OUT").font(Blue.mono(7, .bold)).tracking(2).foregroundStyle(Blue.dim)
+                        }
+                        Text("· \(store.viewedGuestName) · \(subtitle)")
+                            .font(Blue.mono(9)).foregroundStyle(Blue.sub)
+                            .lineLimit(1).truncationMode(.tail)
+                        Spacer()
                     }
-                    Text("· \(store.viewedGuestName) · \(subtitle)")
-                        .font(Blue.mono(9)).foregroundStyle(Blue.sub)
-                        .lineLimit(1).truncationMode(.tail)
-                    Spacer()
+                    .contentShape(Rectangle())
                 }
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .accessibilityLabel(guestExpanded ? "Collapse guest answer" : "Expand guest answer")
+                if editable {
+                    Button { openOutsideAnswerSheet(replacing: true) } label: {
+                        Text("REPLACE").font(Blue.mono(9, .bold)).tracking(1).foregroundStyle(Blue.sub)
+                            .padding(.horizontal, 8).padding(.vertical, 5)
+                            .glassHover(corner: 8).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Replace the guest answer")
+                    Button(action: requestRemoveGuest) {
+                        Text("REMOVE").font(Blue.mono(9, .bold)).tracking(1).foregroundStyle(Blue.sub)
+                            .padding(.horizontal, 8).padding(.vertical, 5)
+                            .glassHover(corner: 8).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Remove the guest answer")
+                }
             }
-            .buttonStyle(.plain)
             .padding(.horizontal, 20).padding(.vertical, 14)
-            .accessibilityLabel(guestExpanded ? "Collapse guest answer" : "Expand guest answer")
             if guestExpanded {
                 Rectangle().fill(Blue.glassStroke).frame(height: 1)
                 // Capped + independently scrollable: in the classic layout this card shares a fixed
@@ -1900,10 +1936,39 @@ struct ContentView: View {
             Text(store.viewedQuestion)
                 .font(Blue.mono(10)).foregroundStyle(Blue.sub).lineLimit(1).truncationMode(.tail)
             Spacer()
+            if showOutsideAnswerChip { outsideAnswerChip }
             exportMenu.offset(y: layout.exportY)   // EXPORT can be nudged independently
         }
         // offset (not padding) so moving this row never pushes the panels — they stay put.
         .offset(y: layout.roundBarTop)
+    }
+
+    /// OUTSIDE ANSWER: on the latest round, once a real advisor has answered and while it has no
+    /// guest yet. Never on the example. A one-answer round leaves it to the second-view card, whose
+    /// PASTE button is the same control (one way to do one thing).
+    private var showOutsideAnswerChip: Bool {
+        guard store.isViewingLatest, !store.isReadOnlySession,
+              let last = store.rounds.last, last.guestAnswer == nil else { return false }
+        return last.answeredSeatIDs.subtracting([Round.guestSeatID]).count >= 2
+    }
+
+    private var outsideAnswerChip: some View {
+        Button { openOutsideAnswerSheet(replacing: false) } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "plus").font(.system(size: 7, weight: .bold))
+                Text("OUTSIDE ANSWER").font(Blue.mono(8, .bold)).tracking(1)
+            }
+            .foregroundStyle(isBusy ? Blue.dim : Blue.sub)
+            .padding(.horizontal, 7).padding(.vertical, 2.5)
+            .glassHover(corner: 7)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay(Capsule().strokeBorder(Blue.glassStroke, lineWidth: 1))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(isBusy)
+        .help("Paste another AI's answer into this round. It joins blind review as one more anonymous advisor; any analysis on this round is cleared so you can re-run it.")
+        .accessibilityLabel("Add an outside answer to this round")
     }
 
     /// A quiet outlined chip marking that the viewed round already has this artifact (DIV / SYN).
@@ -2631,6 +2696,7 @@ struct ContentView: View {
                 Button {
                     guestDraft = pickedGuest?.text ?? guestDraft
                     guestNameDraft = pickedGuest?.name ?? guestNameDraft
+                    guestSheetMode = .stage
                     showGuestSheet = true
                 } label: {
                     Image(systemName: "theatermasks")
@@ -2804,11 +2870,21 @@ struct ContentView: View {
     private let guestInfo = "A guest seat lets an outside answer face the council. Paste it here; in peer review it appears as just another anonymous advisor — the models can't tell it was pasted — and it counts in divergence, dissent, and synthesis. It never generates anything itself."
 
     @ViewBuilder private var guestSheet: some View {
-        let trimmed = guestDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        // .stage keeps today's copy and drafts; the after-the-fact modes use their own drafts.
+        let outside = guestSheetMode != .stage
+        let replacing = guestSheetMode == .addToLatest(replacing: true)
+        let draft = outside ? $outsideDraft : $guestDraft
+        let nameDraft = outside ? $outsideNameDraft : $guestNameDraft
+        let trimmed = draft.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let capError = trimmed.isEmpty ? nil : CouncilLimits.guestError(trimmed)
+        // Seating a guest after the fact changes the blind set, so the round's analysis goes.
+        let clearsAnalysis = outside && store.latestRoundHasAnalysis
+        let confirmLabel = !outside ? "SEAT THE GUEST"
+            : replacing ? (clearsAnalysis ? "REPLACE & CLEAR ANALYSIS" : "REPLACE GUEST")
+                        : (clearsAnalysis ? "SEAT & CLEAR ANALYSIS" : "SEAT THE GUEST")
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                Text("GUEST SEAT").font(Blue.mono(11, .bold)).tracking(2).foregroundStyle(Blue.ink)
+                Text(replacing ? "REPLACE GUEST" : "GUEST SEAT").font(Blue.mono(11, .bold)).tracking(2).foregroundStyle(Blue.ink)
                 InfoDot(text: guestInfo)
                 Spacer()
                 Button { showGuestSheet = false } label: {
@@ -2826,18 +2902,20 @@ struct ContentView: View {
             Rectangle().fill(Blue.glassStroke).frame(height: 1)
 
             VStack(alignment: .leading, spacing: 12) {
-                Text("Paste an answer from any AI — ChatGPT, Gemini, anywhere. With your next question it takes a seat as one more anonymous advisor: peer-reviewed blind, and counted in divergence and synthesis. It never runs a model, so it can't answer back in the debate round.")
+                Text(outside
+                     ? "Paste an answer from any AI: ChatGPT, Claude, Gemini, anywhere. It joins this round as one more anonymous advisor, reviewed blind and counted in divergence and synthesis. It never runs a model, so it can't answer back in the debate round."
+                     : "Paste an answer from any AI — ChatGPT, Gemini, anywhere. With your next question it takes a seat as one more anonymous advisor: peer-reviewed blind, and counted in divergence and synthesis. It never runs a model, so it can't answer back in the debate round.")
                     .font(Blue.body(13)).foregroundStyle(Blue.sub)
                     .fixedSize(horizontal: false, vertical: true)
 
-                TextEditor(text: $guestDraft)
+                TextEditor(text: draft)
                     .font(Blue.body(13)).foregroundStyle(Blue.ink).scrollContentBackground(.hidden)
                     .frame(maxHeight: .infinity).padding(8)
                     .background(Blue.glassFill, in: RoundedRectangle(cornerRadius: 9))
                     .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Blue.glassStroke, lineWidth: 1))
 
                 HStack(spacing: 10) {
-                    PlainTextField(text: $guestNameDraft, placeholder: "name (optional — revealed only after review)", fontSize: 11)
+                    PlainTextField(text: nameDraft, placeholder: "name (optional — revealed only after review)", fontSize: 11)
                         .frame(width: 300, height: 16)
                     Spacer()
                     Text("\(trimmed.count.formatted()) chars")
@@ -2852,16 +2930,31 @@ struct ContentView: View {
                     .foregroundStyle(Blue.red)
                 }
 
+                // Neutral, not red: clearing the analysis is the honest consequence, not an error.
+                if clearsAnalysis {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle").font(.system(size: 9))
+                        Text("This round already has peer review and analysis. Seating a guest clears them; run the analysis again to include it.")
+                            .font(Blue.mono(9))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .foregroundStyle(Blue.sub)
+                }
+
                 HStack {
                     Text("Tip: strip lines like “As ChatGPT…” — the review is blind, and a self-introduction unblinds it.")
                         .font(Blue.mono(9)).foregroundStyle(Blue.dim)
                     Spacer()
                     Button {
-                        let name = guestNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-                        pickedGuest = GuestAnswer(name: name.isEmpty ? nil : name, text: trimmed)
-                        showGuestSheet = false
+                        let name = nameDraft.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if outside {
+                            seatOutsideAnswer(trimmed, name: name)
+                        } else {
+                            pickedGuest = GuestAnswer(name: name.isEmpty ? nil : name, text: trimmed)
+                            showGuestSheet = false
+                        }
                     } label: {
-                        Text("SEAT THE GUEST").font(Blue.mono(10, .bold)).tracking(1)
+                        Text(confirmLabel).font(Blue.mono(10, .bold)).tracking(1)
                             .foregroundStyle(trimmed.isEmpty || capError != nil ? Blue.ink : Blue.paper)
                             .padding(.horizontal, 14).padding(.vertical, 8)
                             .background(trimmed.isEmpty || capError != nil ? AnyShapeStyle(Blue.glassFill) : AnyShapeStyle(Blue.ink),
@@ -2879,6 +2972,47 @@ struct ContentView: View {
         }
         .frame(width: 580, height: 470)
         .background(Blue.bg)
+    }
+
+    /// OUTSIDE ANSWER (round bar), REPLACE (guest card) and PASTE (second-view card): the guest
+    /// sheet in after-the-fact mode, on the latest round. A new guest starts from empty drafts;
+    /// REPLACE starts from the current guest.
+    private func openOutsideAnswerSheet(replacing: Bool) {
+        guard !isBusy, !store.isReadOnlySession, store.isViewingLatest else { return }
+        if replacing, let last = store.rounds.last, let g = last.guestAnswer {
+            outsideDraft = g
+            outsideNameDraft = last.guestName == "Guest" ? "" : last.guestName   // "Guest" = no name given
+        } else {
+            outsideDraft = ""
+            outsideNameDraft = ""
+        }
+        guestSheetMode = .addToLatest(replacing: replacing)
+        showGuestSheet = true
+    }
+
+    /// Seat (or replace) the latest round's guest. The engine refuses silently, so the cap is
+    /// checked here first; it clears any analysis on the round itself.
+    private func seatOutsideAnswer(_ text: String, name: String) {
+        guard !text.isEmpty, CouncilLimits.guestError(text) == nil else { return }
+        store.addGuestAnswer(text, name: name.isEmpty ? nil : name)
+        showGuestSheet = false
+        outsideDraft = ""
+        outsideNameDraft = ""
+        if isClassic {
+            canvasMode = .panels
+        } else {
+            guestExpanded = false
+            // After the sheet is gone and the card is in the page: bring it (and RUN under it) into view.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                withAnimation(Motion.view) { flowProxy?.scrollTo("stage.guest", anchor: .center) }
+            }
+        }
+    }
+
+    /// REMOVE on the guest card: straight away, or after asking when it would clear analysis.
+    private func requestRemoveGuest() {
+        guard !isBusy, !store.isReadOnlySession else { return }
+        if store.latestRoundHasAnalysis { confirmRemoveGuest = true } else { store.removeGuestAnswer() }
     }
 
     @ViewBuilder private var imagePreviewSheet: some View {
