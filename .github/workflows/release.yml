@@ -26,8 +26,8 @@ permissions:
   contents: write          # create the Release AND commit appcast.xml back to main
 
 env:
-  SPARKLE_TOOLS_VERSION: "2.10.0"  # must equal the Sparkle version in Package.resolved (pbxproj: upToNextMajor from
-                                   # 2.10.0; Package.resolved pins 2.10.0). Bump both together. `sign_update` comes from this tarball
+  SPARKLE_TOOLS_VERSION: "2.10.1"  # must equal the Sparkle version in Package.resolved (pbxproj: upToNextMajor from
+                                   # 2.10.1; Package.resolved pins 2.10.1). Bump both together. `sign_update` comes from this tarball
 
 jobs:
   release:
@@ -87,12 +87,14 @@ jobs:
           assert_universal "$APP/Contents/MacOS/Council"
           assert_universal "$APP/Contents/Frameworks/Sparkle.framework/Versions/Current/Sparkle"
           SIGN="$(codesign -dv "$APP" 2>&1)"
-          echo "$SIGN" | grep -iE 'Signature|TeamIdentifier' || true
+          # Pass or fail only: the signing details themselves never go into this public log.
           echo "$SIGN" | grep -q 'Signature=adhoc' \
             || { echo "::error::Council.app is not ad-hoc signed (CODE_SIGN_IDENTITY must stay \"-\")"; exit 1; }
+          echo "signature: ad-hoc"
           if echo "$SIGN" | grep 'TeamIdentifier=' | grep -qv 'TeamIdentifier=not set'; then
             echo "::error::Council.app embeds a TeamIdentifier — the shipped build must carry no team"; exit 1
           fi
+          echo "team: none embedded"
           MIN_OS="$(/usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "$APP/Contents/Info.plist")"
           [ "$MIN_OS" = "14.0" ] || { echo "::error::LSMinimumSystemVersion is '$MIN_OS', expected 14.0"; exit 1; }
 

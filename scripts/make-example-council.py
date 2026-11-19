@@ -9,7 +9,9 @@ never edits answer text. It refuses anything that would make a misleading or pri
   - an attachment (hadAttachment / attachedDocument) or a guest answer;
   - any journal, reminder or Engram field;
   - missing peer reviews, divergence, divergence score, synthesis or rebuttals;
-  - a missing outlier / outlierSeatID (no dissent card).
+  - a missing outlier / outlierSeatID (no dissent card);
+  - an answer that did not finish (any answerStatuses entry other than "complete"), which the app
+    would mark as incomplete for every new user.
 
 It gives the session and its round fresh ids, drops the conversation history, wraps it with what
 the session file doesn't record (each seat's provider and model, who synthesized, the chair), runs
@@ -132,6 +134,15 @@ def check_session(session):
         problems.append("outlierSeatID is missing")
     elif str(sid) not in real:
         problems.append(f"outlierSeatID {sid} has no answer")
+    # No map (a round from before 1.3.2) means every answer finished. Any entry other than
+    # "complete", an unknown value included, is an answer that may not have.
+    statuses = r.get("answerStatuses")
+    if statuses is not None and not isinstance(statuses, dict):
+        problems.append("answerStatuses is not a seat -> status map")
+    elif statuses:
+        unfinished = [f"seat {k}: {v}" for k, v in sorted(statuses.items()) if v != "complete"]
+        if unfinished:
+            problems.append("not every answer finished (" + ", ".join(unfinished) + ")")
     return problems
 
 

@@ -677,16 +677,20 @@ struct ContentView: View {
                      action: { screen = .council; canvasMode = .panels })
 
             if isClassic {
+            // A round held back only by its cut-off answers opens the page without running: its
+            // selection chips are where a cut-off answer is brought back in.
+            let reviewOpen = store.canPeerReview || store.hasPeerReviewForViewedRound || blockedByIncompleteAnswers
             modeItem("arrow.2.squarepath", "PEER REVIEW",
                      state: (screen == .council && canvasMode == .peerReview) ? .active
-                          : ((store.canPeerReview || store.hasPeerReviewForViewedRound) ? .button : .locked),
+                          : (reviewOpen ? .button : .locked),
                      hint: store.hasPeerReviewForViewedRound
                         ? "Show this round's peer review (already generated)"
                         : (store.canPeerReview ? "Models review each other's answers, anonymized"
-                                               : "Ask a question first — unlocks once ≥2 models have answered"),
-                     action: (store.canPeerReview || store.hasPeerReviewForViewedRound) ? {
+                           : (blockedByIncompleteAnswers ? incompleteBlockReason
+                                                         : "Ask a question first — unlocks once ≥2 models have answered")),
+                     action: reviewOpen ? {
                         screen = .council; canvasMode = .peerReview
-                        if !store.hasPeerReviewForViewedRound { runRound { await store.peerReview() } }
+                        if !store.hasPeerReviewForViewedRound && store.canPeerReview { runRound { await store.peerReview() } }
                      } : nil)
 
             modeItem("bubble.left.and.bubble.right", "DEBATE",
@@ -702,7 +706,7 @@ struct ContentView: View {
             modeItem("arrow.triangle.branch", "DIVERGENCE",
                      state: (screen == .council && canvasMode == .divergence) ? .active : (divergenceAvailable ? .button : .locked),
                      hint: divergenceAvailable ? "Map where advisors agree and diverge"
-                                               : "Answer ≥2 advisors first",
+                        : (blockedByIncompleteAnswers ? incompleteBlockReason : "Answer ≥2 advisors first"),
                      action: divergenceAvailable ? { screen = .council; canvasMode = .divergence } : nil)
 
             modeItem("exclamationmark.bubble", "DISSENT",
@@ -714,7 +718,7 @@ struct ContentView: View {
             modeItem("rectangle.3.group", "SYNTHESIS",
                      state: (screen == .council && canvasMode == .synthesis) ? .active : (synthesisAvailable ? .button : .locked),
                      hint: synthesisAvailable ? "Final answer that preserves the dissent"
-                                              : "Answer ≥2 advisors first",
+                        : (blockedByIncompleteAnswers ? incompleteBlockReason : "Answer ≥2 advisors first"),
                      action: synthesisAvailable ? { screen = .council; canvasMode = .synthesis } : nil)
 
             }
@@ -1278,23 +1282,38 @@ struct ContentView: View {
             peerReviewFlowCard.id("stage.pr").transition(.opacity)
         } else if running == "Peer review" {
             stageProgressCard("PEER REVIEW").id("stage.pr")
+        } else if let error = store.peerReviewError {
+            stageErrorCard("PEER REVIEW", error).id("stage.pr").transition(.opacity)
         }
+        // A divergence or synthesis that kept nothing says why in its own slot, like peer review
+        // above. Hidden while an earlier stage runs again: the line is about the last attempt, and
+        // this stage is about to get a new one.
         if store.divergenceText?.isEmpty == false {
             divergenceFlowCard.id("stage.div").transition(.opacity)
         } else if running == "Divergence" {
             stageProgressCard("DIVERGENCE").id("stage.div")
+        } else if running != "Peer review", let error = store.divergenceError {
+            stageErrorCard("DIVERGENCE", error).id("stage.div").transition(.opacity)
         }
         if store.hasRebuttalForViewedRound {
             debateFlowCard.id("stage.debate").transition(.opacity)
         } else if running == "Debate" {
             stageProgressCard("DEBATE").id("stage.debate")
-        } else if store.canRebut, running == nil, !store.isWorking {
-            debateOfferCard.id("stage.debate")
+        } else {
+            // A debate that kept no final take says why; the offer below still runs it again.
+            if let error = store.rebuttalError {
+                stageErrorCard("DEBATE", error).id("stage.debate.error").transition(.opacity)
+            }
+            if store.canRebut, running == nil, !store.isWorking {
+                debateOfferCard.id("stage.debate")
+            }
         }
         if store.synthesisText?.isEmpty == false {
             synthesisFlowCard.id("stage.syn").transition(.opacity)
         } else if running == "Synthesis" {
             stageProgressCard("SYNTHESIS").id("stage.syn")
+        } else if running != "Peer review", running != "Divergence", let error = store.synthesisError {
+            stageErrorCard("SYNTHESIS", error).id("stage.syn").transition(.opacity)
         }
         if store.chairSummaryText?.isEmpty == false {
             chairSummaryFlowCard.id("stage.chair").transition(.opacity)
@@ -1309,7 +1328,7 @@ struct ContentView: View {
         if showSecondViewCard {
             secondViewCard.transition(.opacity)
         }
-        if showRunAnalysis {
+        if showRunAnalysis || blockedByIncompleteAnswers {
             runAnalysisCard
         }
         Color.clear.frame(height: 2)
@@ -1411,6 +1430,29 @@ struct ContentView: View {
         .glassPanel(corner: 22)
     }
 
+    /// A stage that kept nothing (every call cut off, stalled or stopped): the engine's line in the
+    /// stage's slot, in the chair error card's look. No RETRY — the ANALYSIS card's RUN and the
+    /// debate offer already run the stage again.
+    private func stageErrorCard(_ title: String, _ message: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 10)).foregroundStyle(Blue.red)
+            Text(title).font(Blue.mono(10, .bold)).tracking(2).foregroundStyle(Blue.sub)
+            Text(message).font(Blue.mono(9)).foregroundStyle(Blue.red)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+        }
+        .padding(.horizontal, 20).padding(.vertical, 12)
+        .glassPanel(corner: 22)
+    }
+
+    /// A partly finished stage's engine line under its card header: the divergence/synthesis "⚠︎"
+    /// line, one line per seat that didn't finish. Never saved.
+    private func stageErrorLine(_ message: String) -> some View {
+        Text("⚠︎ \(message)").font(Blue.mono(9)).foregroundStyle(Blue.red)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private let chairInfo = "The neutral chair's read of the debate — who moved, who held, and which disagreement matters most. The chair never answers the question itself, so it has no position to defend."
 
     /// Classic layout: the pre-1.1 canvas — panels, or ONE full-screen deliberation stage,
@@ -1498,6 +1540,7 @@ struct ContentView: View {
 
                         MarkdownView(text: answer, baseSize: 15).equatable().textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                        IncompleteAnswerNote(status: store.dissentSeatID.flatMap { store.viewedAnswerStatus($0) })
                     }
                     .frame(maxWidth: 760, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1537,6 +1580,9 @@ struct ContentView: View {
             }
             .padding(20)
             .overlay(alignment: .bottom) { Rectangle().fill(Blue.glassStroke).frame(height: 1) }
+            if let error = store.rebuttalError {
+                stageErrorLine(error).padding(.horizontal, 20).padding(.top, 12)
+            }
 
             if store.deliberationBusy && !store.hasRebuttalForViewedRound {
                 VStack(spacing: 12) {
@@ -1728,7 +1774,7 @@ struct ContentView: View {
                 Text("· advisors critique each other").font(Blue.mono(9)).foregroundStyle(Blue.sub)
                 Spacer()
                 if store.hasPeerReviewForViewedRound && !peerReviewGenerating && !store.isReadOnlySession {
-                    Button { runRound { await store.peerReview() } } label: {
+                    Button { regeneratePeerReview() } label: {
                         HStack(spacing: 5) {
                             Image(systemName: "arrow.clockwise").font(.system(size: 9, weight: .bold))
                             Text("REGENERATE").font(Blue.mono(9, .bold)).tracking(1)
@@ -1753,6 +1799,9 @@ struct ContentView: View {
             }
             .padding(20)
             .overlay(alignment: .bottom) { Rectangle().fill(Blue.glassStroke).frame(height: 1) }
+            if let error = store.peerReviewError {
+                stageErrorLine(error).padding(.horizontal, 20).padding(.top, 12)
+            }
 
             if peerReviewGenerating && !store.hasPeerReviewForViewedRound {
                 VStack(spacing: 12) {
@@ -1779,7 +1828,7 @@ struct ContentView: View {
                         .multilineTextAlignment(.center).lineSpacing(2).frame(maxWidth: 400)
                     Text("Not generated for this round yet.")
                         .font(Blue.mono(9)).tracking(1).foregroundStyle(Blue.dim)
-                    if deliberationChoices.count > 2 && !store.isReadOnlySession {
+                    if (deliberationChoices.count > 2 || blockedByIncompleteAnswers) && !store.isReadOnlySession {
                         seatSelectionChips.fixedSize()
                     }
                     Button { runRound { await store.peerReview() } } label: {
@@ -1808,19 +1857,49 @@ struct ContentView: View {
     private var divergenceAvailable: Bool { store.canSynthesize || store.divergenceText != nil }
     private var synthesisAvailable: Bool { store.canSynthesize || store.synthesisText != nil }
 
-    /// Why GENERATE is disabled — distinguishes "busy elsewhere" from "needs ≥2 answers".
+    /// Why GENERATE is disabled — distinguishes "busy elsewhere" from "needs ≥2 answers", and a
+    /// round held back only by its cut-off answers from one that really has too few.
     private var deliberationDisabledReason: String {
-        store.isWorking ? "A generation is in progress — wait for it to finish."
-                        : "Answer ≥2 advisors in this round first."
+        if store.isWorking { return "A generation is in progress — wait for it to finish." }
+        return blockedByIncompleteAnswers ? incompleteBlockReason : "Answer ≥2 advisors in this round first."
     }
 
+    /// The viewed round has exactly one finished answer in, and a cut-off one sitting out by default
+    /// that could join it — so deliberation can't run until the selection chips bring it back. Not
+    /// once the round has analysis (a chip tap would erase it), and never for a seat without a key:
+    /// including that one wouldn't give deliberation its second position.
+    private var blockedByIncompleteAnswers: Bool {
+        guard !store.isReadOnlySession, !store.isWorking,
+              store.rounds.indices.contains(store.viewingRound),
+              !store.hasPeerReviewForViewedRound, store.divergenceText == nil, store.synthesisText == nil
+        else { return false }
+        let incomplete = store.rounds[store.viewingRound].incompleteSeatIDs
+        let offered = deliberationChoices.map(\.id)
+        let finished = offered.filter { !incomplete.contains($0) }
+        guard finished.count == 1, store.isSeatDeliberating(finished[0]),
+              offered.filter({ store.isSeatDeliberating($0) }).count < 2 else { return false }
+        return offered.contains { id in
+            incomplete.contains(id) && !store.isSeatDeliberating(id)
+                && store.seats.contains { $0.id == id && store.hasKey($0) }
+        }
+    }
 
-    /// A loaded round with answers but no analysis yet (older sessions, or a stopped pipeline) —
-    /// one quiet way to run it, since the stage nav is gone.
+    /// What a round blocked by its cut-off answers needs.
+    private var incompleteBlockReason: String { "Only one answer finished — include the cut-off one to deliberate." }
+
+
+    /// A round whose analysis isn't all there: answers with none yet (an older session), or a
+    /// pipeline that was stopped or lost a stage partway. One quiet way to run what's missing, since
+    /// the stage nav is gone: RUN skips the stages the round already has.
     private var showRunAnalysis: Bool {
-        store.canSynthesize && !store.hasPeerReviewForViewedRound
-            && store.divergenceText == nil && store.synthesisText == nil
-            && store.pipelineStage == nil
+        store.canSynthesize && store.pipelineStage == nil
+            && (!store.hasPeerReviewForViewedRound || store.divergenceText == nil || store.synthesisText == nil)
+    }
+
+    /// The viewed round already holds part of an analysis. RUN then only fills in the rest, and the
+    /// selection is settled: a chip tap would erase the stages that did finish.
+    private var analysisPartlyDone: Bool {
+        store.hasPeerReviewForViewedRound || store.divergenceText != nil || store.synthesisText != nil
     }
 
     private var panelGrid: some View {
@@ -1849,6 +1928,7 @@ struct ContentView: View {
                                  satOut: !store.isSeatDeliberating(seat.id)
                                      && store.viewedAnswer(seat.id)?.isEmpty == false
                                      && store.hasPeerReviewForViewedRound,
+                                 answerStatus: store.viewedAnswerStatus(seat.id),
                                  onValidateKey: { k in
                                      let err = await store.validateAndSaveKey(k, for: seat)
                                      if err == nil, let p = seat.provider { await store.refreshModels(for: p) }
@@ -1998,12 +2078,19 @@ struct ContentView: View {
             MarkdownView(text: rebuttal, baseSize: 14).equatable().textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if let original, !original.isEmpty {
+                // An earlier answer that ended early says so in the label, so it shows while closed.
+                let status = store.viewedAnswerStatus(seat.id)
+                let incomplete = status?.isIncomplete == true
                 DisclosureGroup {
-                    MarkdownView(text: original, baseSize: 12).equatable().textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.top, 6)
+                    VStack(alignment: .leading, spacing: 10) {
+                        MarkdownView(text: original, baseSize: 12).equatable().textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        if incomplete { IncompleteAnswerNote(status: status) }
+                    }
+                    .padding(.top, 6)
                 } label: {
-                    Text("EARLIER ANSWER").font(Blue.mono(9, .bold)).tracking(1).foregroundStyle(Blue.dim)
+                    Text(incomplete ? "EARLIER ANSWER · INCOMPLETE" : "EARLIER ANSWER")
+                        .font(Blue.mono(9, .bold)).tracking(1).foregroundStyle(Blue.dim)
                 }
                 .padding(.top, 4)
             }
@@ -2301,20 +2388,25 @@ struct ContentView: View {
                         .font(Blue.body(10)).foregroundStyle(Blue.dim)
                 }
                 Spacer()
-                Button { runRound { await store.runAutoPipeline() } } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "play.fill").font(.system(size: 9, weight: .bold))
-                        Text("RUN").font(Blue.mono(10, .bold)).tracking(1)
+                // Held back by its cut-off answers: no RUN until the chips bring one back in.
+                if !blockedByIncompleteAnswers {
+                    Button { runRound { await store.runAutoPipeline() } } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "play.fill").font(.system(size: 9, weight: .bold))
+                            Text("RUN").font(Blue.mono(10, .bold)).tracking(1)
+                        }
+                        .foregroundStyle(Blue.paper)
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(Blue.ink, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                        .contentShape(Rectangle())
                     }
-                    .foregroundStyle(Blue.paper)
-                    .padding(.horizontal, 14).padding(.vertical, 8)
-                    .background(Blue.ink, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                    .contentShape(Rectangle())
+                    .buttonStyle(.plain).disabled(store.isWorking)
                 }
-                .buttonStyle(.plain).disabled(store.isWorking)
             }
-            // With 3+ positions on the table, the answers can be cherry-picked into deliberation.
-            if deliberationChoices.count > 2 {
+            // With 3+ positions on the table, the answers can be cherry-picked into deliberation —
+            // and with two, a cut-off one can be brought back in. Not once part of the analysis
+            // exists: changing the selection would erase it.
+            if (deliberationChoices.count > 2 || blockedByIncompleteAnswers) && !analysisPartlyDone {
                 seatSelectionChips
             }
         }
@@ -2411,6 +2503,16 @@ struct ContentView: View {
     }
 
     private var analysisSubtitle: String {
+        if blockedByIncompleteAnswers { return incompleteBlockReason }
+        if analysisPartlyDone {
+            // Name only what RUN will actually do: the stages this round doesn't have yet.
+            var missing: [String] = []
+            if !store.hasPeerReviewForViewedRound { missing.append("peer review") }
+            if store.divergenceText == nil { missing.append("divergence") }
+            if store.synthesisText == nil { missing.append("synthesis") }
+            let list = missing.joined(separator: " → ")
+            return list.prefix(1).uppercased() + list.dropFirst() + " still to run for this round."
+        }
         let all = deliberationChoices.count
         let included = deliberationChoices.filter { store.isSeatDeliberating($0.id) }.count
         return included < all
@@ -2497,7 +2599,7 @@ struct ContentView: View {
                 InfoDot(text: peerReviewInfo)
                 Spacer()
                 if peerReviewExpanded && !store.isReadOnlySession {
-                    Button { runRound { await store.peerReview() } } label: {
+                    Button { regeneratePeerReview() } label: {
                         HStack(spacing: 5) {
                             Image(systemName: "arrow.clockwise").font(.system(size: 9, weight: .bold))
                             Text("REGENERATE").font(Blue.mono(9, .bold)).tracking(1)
@@ -2509,6 +2611,9 @@ struct ContentView: View {
                 }
             }
             .padding(.horizontal, 20).padding(.vertical, 14)
+            if let error = store.peerReviewError {
+                stageErrorLine(error).padding(.horizontal, 20).padding(.bottom, 12)
+            }
 
             if peerReviewExpanded {
                 Rectangle().fill(Blue.glassStroke).frame(height: 1)
@@ -2575,6 +2680,9 @@ struct ContentView: View {
     private var debateFlowCard: some View {
         VStack(alignment: .leading, spacing: 0) {
             stageHeader("DEBATE", info: debateInfo, subtitle: "final takes — who moved, who held")
+            if let error = store.rebuttalError {
+                stageErrorLine(error).padding(.horizontal, 20).padding(.top, 12)
+            }
             VStack(spacing: 14) {
                 ForEach(store.seats) { seat in
                     if let rebuttal = store.viewedRebuttal(seat.id) {
@@ -2641,6 +2749,7 @@ struct ContentView: View {
 
                     MarkdownView(text: answer, baseSize: 15).equatable().textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                    IncompleteAnswerNote(status: store.dissentSeatID.flatMap { store.viewedAnswerStatus($0) })
                 }
                 .frame(maxWidth: 760, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -3264,7 +3373,23 @@ struct ContentView: View {
 
     /// Run a deliberation round as the cancellable in-flight task.
     private func runRound(_ op: @escaping () async -> Void) {
-        runningTask = Task { await op(); runningTask = nil }
+        // Round navigation isn't locked during a run, and the stage errors aren't tied to a round:
+        // one that lands after the user moved on belongs to the round the run started on.
+        let round = store.viewingRound
+        runningTask = Task {
+            await op()
+            if store.viewingRound != round { store.clearDeliberationErrors() }
+            runningTask = nil
+        }
+    }
+
+    /// Re-running peer review wipes the round's debate and chair summary, so their errors go too —
+    /// otherwise a DEBATE error card outlives the debate it describes.
+    private func regeneratePeerReview() {
+        runRound {
+            store.rebuttalError = nil; store.chairError = nil
+            await store.peerReview()
+        }
     }
 
     /// Render a deliberation artifact to a shareable PNG (current theme) and save it or copy it.
@@ -3611,6 +3736,32 @@ private struct InfoDot: View {
     }
 }
 
+private extension AnswerStatus {
+    /// The line under a kept answer that ended early; nil for a whole answer (or a failed call,
+    /// which keeps none).
+    var incompleteNote: String? {
+        switch self {
+        case .truncated: return "Cut off at the length limit — raise this seat's max tokens."
+        case .stalled:   return "Stopped responding mid-answer — this answer is incomplete."
+        case .cancelled: return "Stopped before it finished — this answer is incomplete."
+        case .complete, .failed: return nil
+        }
+    }
+}
+
+/// Under an answer that ended early: where and how the panel's error line sits, in the standby
+/// grey and without the "!" — nothing failed, the text just isn't the whole answer.
+private struct IncompleteAnswerNote: View {
+    let status: AnswerStatus?
+    var body: some View {
+        if let note = status?.incompleteNote {
+            Text(note).font(Blue.mono(11)).foregroundStyle(Blue.warn)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .textSelection(.enabled)
+        }
+    }
+}
+
 private struct AdvisorPanel: View {
     let seat: Seat
     /// Provider name stored with this round's answer. The title prefers it while that answer is shown.
@@ -3626,6 +3777,9 @@ private struct AdvisorPanel: View {
     let isAdversary: Bool
     /// This seat answered but sits out of the round's deliberation (selective deliberation).
     var satOut: Bool = false
+    /// How this seat's answer in the viewed round ended. nil while it streams, and on rounds saved
+    /// before 1.3.2 — both show nothing.
+    var answerStatus: AnswerStatus? = nil
     let onValidateKey: (String) async -> String?   // returns nil on success, else an error message
     let onSetModel: (String) -> Void
     let onPickProvider: (LLMProvider) -> Void
@@ -3650,6 +3804,8 @@ private struct AdvisorPanel: View {
 
     private var hasAnswer: Bool { answer?.isEmpty == false }
     private var failed: Bool { failedMessage != nil }
+    /// The kept answer ended early (cut off, stalled or stopped). Never while it is still streaming.
+    private var incomplete: Bool { hasAnswer && !loading && answerStatus?.isIncomplete == true }
     /// Live model list when we have one (Ollama installs / OpenRouter catalogue / a keyed /models),
     /// otherwise the provider's fixed suggestions — so the picker is never blank.
     private var modelChoices: [String] {
@@ -3680,6 +3836,7 @@ private struct AdvisorPanel: View {
         if !connected { return "OFFLINE — KEY REQUIRED" }
         if loading { return "PROCESSING" }
         if failed { return "ERROR" }
+        if incomplete { return "INCOMPLETE" }
         return hasAnswer ? "ACTIVE" : "STANDBY"
     }
 
@@ -3727,7 +3884,7 @@ private struct AdvisorPanel: View {
                 }
                 if satOut {
                     Text("SAT OUT").font(Blue.mono(7, .bold)).tracking(2).foregroundStyle(Blue.dim)
-                        .help("Not part of this round's deliberation — excluded, or this seat has no key right now")
+                        .help("Not part of this round's deliberation — excluded, this seat has no key right now, or its answer didn't finish")
                 }
             }
             Spacer()
@@ -3778,6 +3935,7 @@ private struct AdvisorPanel: View {
         if recorded != nil { return Blue.dim }
         if failed { return Blue.red }
         if loading { return Blue.accent }
+        if incomplete { return Blue.warn }   // the standby grey: a kept answer, not an error
         if hasAnswer { return Blue.ok }
         if seat.provider == nil || !connected { return Blue.dim }
         return Blue.warn   // standby
@@ -3907,6 +4065,7 @@ private struct AdvisorPanel: View {
                     if loading {
                         HStack(spacing: 0) { StreamingCaret(); Spacer(minLength: 0) }
                     }
+                    if incomplete { IncompleteAnswerNote(status: answerStatus) }
                     if let failedMessage {
                         Text("! " + failedMessage).font(Blue.mono(11)).foregroundStyle(Blue.red)
                             .frame(maxWidth: .infinity, alignment: .leading)

@@ -37,6 +37,9 @@ git push origin v1.1.3
 4. Re-resolve `Package.resolved` against that engine tag (it must now contain a `councilkit` pin) and commit it.
 5. Run the secret scan (see `COUNCIL_QA_MACOS27.md`) over all three repos — it must return nothing.
 6. After CI finishes, bump the Homebrew cask by hand (Step 5 below).
+7. After CI finishes, put the release's own notes on top of the Release body. The workflow writes only
+   the generic install text; the "What's new" part lives in `docs/release-notes/X.Y.Z.md`:
+   `gh release view vX.Y.Z --json body -q .body > old.md && cat docs/release-notes/X.Y.Z.md <(printf '\n\n---\n\n') old.md > new.md && gh release edit vX.Y.Z --notes-file new.md`
 
 **Two repos, in this order.** The engine is its own package, so an app release that includes engine
 changes is not one command:

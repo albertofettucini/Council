@@ -18,6 +18,22 @@
   <img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-1a1a2e">
 </p>
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/hero-answers-dark.png">
+    <img src="docs/hero-answers-light.png" width="860" alt="Council with three models answering the same question side by side: Claude, GPT and a local Ollama model.">
+  </picture>
+</p>
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/hero-divergence-dark.png">
+    <img src="docs/hero-divergence-light.png" width="860" alt="The divergence card for that round: a score of 8 out of 100, two camps, the outlier named, and a plain summary of where the answers agree and where they differ.">
+  </picture>
+  <br>
+  <sub>One real, unedited session, recorded 14 Oct 2026 with Claude (claude-sonnet-4-6), GPT (gpt-5.4-mini) and Ollama (llama3.2). It ships inside the app as the example council.</sub>
+</p>
+
 ---
 
 ## The idea
@@ -33,7 +49,7 @@ Gemini and more — each answers independently, and then the interesting part be
 3. **Blind peer review.** Each advisor critiques the others' answers without knowing who wrote them — no brand bias, just the argument.
 4. **Divergence — with a score.** A 0–100 read of how far apart the council landed, how many camps formed, and who the outlier is. It measures agreement, not correctness.
 5. **Debate (optional).** One bounded rebuttal round: each advisor revises or holds, and says why. Who moved, who held.
-6. **Synthesis & Dissent.** A decision-ready distillation — plus the outlier's full answer spotlighted, because the majority can be confidently wrong together.
+6. **Synthesis & Dissent.** What the council settled, what you still have to decide, and where they split — plus the outlier's full answer spotlighted, because the majority can be confidently wrong together.
 7. **You decide — and log it.** Record your decision in the journal, and later, how it actually turned out.
 
 ### Bring an outside answer
@@ -58,6 +74,7 @@ One connected advisor plus a guest is already a council of two.
 - 🗣️ **Bounded debate** — one optional rebuttal round; original answers stay tucked underneath so you see what moved
 - ☑️ **Selective deliberation** — after reading the answers, choose which of them go into peer review
 - ❗ **Dissent** — the outlier's full answer, surfaced on its own to judge for yourself
+- ✂️ **No half answers passed off as whole** — an answer that was cut off, lost its connection or was stopped is marked INCOMPLETE and sits out of the review and the score unless you bring it back
 - 🧪 **Example council** — a real recorded session ships with the app, clearly labelled and read-only, so you can see a full council before adding a single key
 - 📓 **Decision journal** — log what you chose, set a reminder, and macOS notifies you when it's time to record how it turned out (local only, no account)
 - 🧭 **Two layouts** — Flow (one page; analysis appears beneath the answers) or Classic (each stage its own screen)
@@ -138,7 +155,8 @@ CLI runs land in the app's history, so you can reopen them in the UI. `council -
 In the recorded run, Claude, GPT and a local Ollama model all say no: start with a modular
 monolith. Each one reviews the other two blind, the score shows how close they landed, and the
 dissent card still puts Ollama's answer in front of you, because its "no" leaves more room for
-exceptions than the other two. Synthesis hands you a decision-ready summary.
+exceptions than the other two. The synthesis lays out what they settled and what is still yours to
+decide.
 
 This exact question is the example council inside the app. Open it from the welcome card, or from Home until your first session, to see the full run: answers, blind review, the score and the dissent.
 
